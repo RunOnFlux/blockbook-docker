@@ -6,7 +6,7 @@ $ docker pull runonflux/blockbook-docker
 ```
 ### Deploy container
 ```shell script
-docker run -d --name fluxblockbook-flux -e COIN=flux -e BOOTSTRAP=1 -e FETCH_FILE="fetch-params.sh" -e EXTRACONFIG="addnode=explorer.zelcash.online\naddnode=explorer.runonflux.io\naddnode=blockbook.runonflux.io\naddnode=explorer.flux.zelcore.io" -e BLOCKBOOK_PORT=9158 -e RPC_PORT=16124 -p 7799:9158 -v /<local_path>:/root runonflux/blockbook-docker
+docker run -d --name fluxblockbook-flux -e COIN=flux -e BOOTSTRAP=1 -e EXTRACONFIG="addnode=explorer.zelcash.online\naddnode=explorer.runonflux.io\naddnode=blockbook.runonflux.io\naddnode=explorer.flux.zelcore.io" -e BLOCKBOOK_PORT=9158 -e -p 7799:9158 -v /<local_path>:/root runonflux/blockbook-docker
 ```
 
 ### Environment Variables
