@@ -390,11 +390,11 @@ if [[ "$CONFIG" == "AUTO" ]]; then
        echo -e "| Downloading init file, URL: $init_url"
        wget "$init_url" -O /root/geth_init.json > /dev/null 2>&1
        echo -e "| Tiggering geth init..."
-       geth --datadir /root/$COIN/backend init /root/geth_init.json
+       geth --datadir /root/$CONFIG_DIR/backend init /root/geth_init.json
        static_nodes_url=$(jq -r .geth.static_nodes_url /root/blockbook.json)
        if [[ "$static_nodes_url" != "" && "$static_nodes_url" != "null" ]]; then
          echo -e "| Downloading static node file, URL: $static_nodes_url"
-         wget "$static_nodes_url" -O /root/$COIN/backend/geth/static-nodes.json
+         wget "$static_nodes_url" -O /root/$CONFIG_DIR/backend/geth/static-nodes.json
        fi
      fi
    fi
