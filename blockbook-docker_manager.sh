@@ -20,7 +20,7 @@ function coin_list(){
     BLOCKBOOKGIT_URL="$1"
   fi
   echo -e "--------------------------------------------------------------------------------------"
-  echo -e "| Blockbook Docker Manager v1.0"
+  echo -e "| Blockbook Docker Manager v1.1"
   echo -e "--------------------------------------------------------------------------------------"
   COIN_LIST=$(curl -SsL $BLOCKBOOKGIT_URL | grep -oP '(?<=title=").*(?=.json" data)')
   COIN_EXCLUDE=$(egrep -v 'consensus|testnet|regtest|test|archive|signet' <<< $COIN_LIST)
@@ -82,7 +82,7 @@ function get_ip() {
 
 if [[ "$1" == "" ]]; then
 echo -e "--------------------------------------------------------"
-echo -e "| Blockbook Docker Manager v1.0"
+echo -e "| Blockbook Docker Manager v1.1"
 echo -e "--------------------------------------------------------"
 echo -e "| Usage:"
 echo -e "| status <coin_name>  - show blockbook docker status"
@@ -153,16 +153,16 @@ else
  echo -e "---------------------------------------------------------------------------------------"
 fi
 
-if [[ "$BLOCKBOOKPOSTINST" != "" && "$1" != "divi" && "$2" != "divi" ]]; then
-  POSTINST="-e FETCH_FILE=${BLOCKBOOKPOSTINST##*/}"
-fi
+#if [[ "$BLOCKBOOKPOSTINST" != "" && "$1" != "divi" && "$2" != "divi" ]]; then
+#  POSTINST="-e FETCH_FILE=${BLOCKBOOKPOSTINST##*/}"
+#fi
 
 get_ip
 if [[ "$1" == "create" ]]; then
-  PROTOCOL=$((jq .ipc.rpc_url_template | egrep -o 'http|ws') <<< $BLOCKBOOKCONFIG)
-  if [[ "$PROTOCOL" != "http" ]]; then
-    RPC_URL_PROTOCOL="-e RPC_URL_PROTOCOL=$PROTOCOL"
-  fi
+ # PROTOCOL=$((jq .ipc.rpc_url_template | egrep -o 'http|ws') <<< $BLOCKBOOKCONFIG)
+ # if [[ "$PROTOCOL" != "http" ]]; then
+ #   RPC_URL_PROTOCOL="-e RPC_URL_PROTOCOL=$PROTOCOL"
+ # fi
   EXTRAFLAGS="$3"
   echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT"
   CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -v /home/$USER/fluxosblockbook_${2}:/root runonflux/blockbook-docker" | awk '$1=$1')
@@ -170,10 +170,10 @@ if [[ "$1" == "create" ]]; then
   bash -c "$CMD"
   echo -e ""
 else
-  PROTOCOL=$((jq .ipc.rpc_url_template | egrep -o 'http|ws') <<< $BLOCKBOOKCONFIG)
-  if [[ "$PROTOCOL" != "http" ]]; then
-    RPC_URL_PROTOCOL="-e RPC_URL_PROTOCOL=$PROTOCOL"
-  fi
+  #PROTOCOL=$((jq .ipc.rpc_url_template | egrep -o 'http|ws') <<< $BLOCKBOOKCONFIG)
+  #if [[ "$PROTOCOL" != "http" ]]; then
+  #  RPC_URL_PROTOCOL="-e RPC_URL_PROTOCOL=$PROTOCOL"
+  #fi
   EXTRAFLAGS="$2"
   echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT (EMULATION ONLY)"
   echo -e "| docker run -d --name fluxosblockbook-${1} -e COIN=${1} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -v /home/$USER/fluxosblockbook_${1}:/root runonflux/blockbook-docker" | awk '$1=$1'
