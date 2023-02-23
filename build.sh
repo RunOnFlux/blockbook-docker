@@ -36,14 +36,27 @@ if [[ ! -d /root/blockbook ]]; then
     exit 1
   fi
   cd /root/blockbook
-  go run build/templates/generate.go $COIN > /dev/null
-  echo -e "| Generated blockchaincfg.json for $COIN"
-  mv build/pkg-defs/blockbook/blockchaincfg.json build
-  if [[ "$DAEMON_CONFIG" == "AUTO" ]]; then
-    echo -e "| Generated daemon config for $COIN daemon"
-    mv build/pkg-defs/backend/server.conf /root/$CONFIG_DIR/$CONFIG_FILE.conf
+  
+  if [[ ! -d /root/$CONFIG_DIR ]]; then
+    echo -e "| Creating config directory..."
+    mkdir -p /root/$CONFIG_DIR
   fi
-  rm -rf build/pkg-defs
+  
+  echo -e "| Generating config files for $COIN"
+  go run build/templates/generate.go $COIN > /dev/null  
+  if [[ -f /root/blockbook/build/pkg-defs/blockbook/blockchaincfg.json ]]; then
+    echo -e "| Moving blockchaincfg.json"
+    mv /root/blockbook/build/pkg-defs/blockbook/blockchaincfg.json /root/blockbook/build
+  fi
+  
+  if [[ "$DAEMON_CONFIG" == "AUTO" ]]; then
+    echo -e "| Generating daemon config for $COIN daemon"
+    if [[ -f /root/blockbook/build/pkg-defs/backend/server.conf ]]; then
+      echo -e "| Moving $CONFIG_FILE.conf"
+      mv /root/blockbook/build/pkg-defs/backend/server.conf /root/$CONFIG_DIR/$CONFIG_FILE.conf
+    fi
+  fi
+  rm -rf /root/blockbook/build/pkg-defs
   if [[ ! -f /root/CRONE_CREATE ]]; then
     echo -e "| Added crone job for log cleaner..."
     (crontab -l -u "$USER" 2>/dev/null; echo "0 0 1-30/5 * *  /bin/bash /clean.sh > /tmp/clean_output.log 2>&1") | crontab -
