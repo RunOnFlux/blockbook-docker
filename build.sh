@@ -7,7 +7,7 @@ if [[ ! -d /root/blockbook ]]; then
   echo -e "-----------------------------------------------------"
   echo -e "| Installing RocksDB [$ROCKSDB_VERSION]..."
   cd /root && git clone -b $ROCKSDB_VERSION --depth 1 https://github.com/facebook/rocksdb.git > /dev/null 2>&1
-  cd /root/rocksdb && CFLAGS=-fPIC CXXFLAGS=-fPIC make -j 4 release > /dev/null 2>&1
+  cd /root/rocksdb && CFLAGS=-fPIC CXXFLAGS=-fPIC PORTABLE=1 make -j 4 release > /dev/null 2>&1
   echo -e "| Installing BlockBook..."
   if [[ "$BLOCKBOOKGIT_URL" == "" ]]; then
     BLOCKBOOKGIT_URL="https://github.com/trezor/blockbook.git"
