@@ -50,7 +50,6 @@ if [[ ! -d /root/blockbook ]]; then
   fi
   
   if [[ "$DAEMON_CONFIG" == "AUTO" ]]; then
-    echo -e "| Generating daemon config for $COIN daemon"
     if [[ -f /root/blockbook/build/pkg-defs/backend/server.conf ]]; then
       echo -e "| Moving $CONFIG_FILE.conf"
       mv /root/blockbook/build/pkg-defs/backend/server.conf /root/$CONFIG_DIR/$CONFIG_FILE.conf
