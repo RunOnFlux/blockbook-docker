@@ -46,8 +46,10 @@
 
  if ! egrep -o "^[0-9]+$" <<< "$CURRENT_NODE_HEIGHT" &>/dev/null; then
   msg="$msg, Daemon = [FAILED]"
+  echo -e "$msg"
   exit 1
  else
    msg="$msg, Daemon = [OK]"
+   echo -e "$msg"
    exit 1
  fi
