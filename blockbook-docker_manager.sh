@@ -20,7 +20,7 @@ function coin_list(){
     BLOCKBOOKGIT_URL="$1"
   fi
   echo -e "--------------------------------------------------------------------------------------"
-  echo -e "| Blockbook Docker Manager v1.1"
+  echo -e "| Blockbook Docker Manager v2.0"
   echo -e "--------------------------------------------------------------------------------------"
   COIN_LIST=$(curl -SsL $BLOCKBOOKGIT_URL | grep -oP '(?<=title=").*(?=.json" data)')
   COIN_EXCLUDE=$(egrep -v 'consensus|testnet|regtest|test|archive|signet' <<< $COIN_LIST)
@@ -51,9 +51,9 @@ function setup(){
  RAW_CONF_URL="https://raw.githubusercontent.com/$GIT_USER/$REPO/$TAG/configs/coins/$COIN.json"
  G_V=($(curl -SsL https://raw.githubusercontent.com/$GIT_USER/$REPO/$TAG/build/docker/bin/Dockerfile | egrep "ENV GOLANG_VERSION|ENV ROCKSDB_VERSION"))
  if [[ "$G_V" != "" ]]; then
-   if [[ ${G_V[1]##*=} != "go1.19.2" ]]; then
-     flage="-e GOLANG_VERSION=${G_V[1]##*=}"
-   fi
+   #if [[ ${G_V[1]##*=} != "go1.19.2" ]]; then
+   #  flage="-e GOLANG_VERSION=${G_V[1]##*=}"
+   #fi
    if [[ ${G_V[3]##*=} != "v7.7.2" ]]; then
     flage="$flage -e ROCKSDB_VERSION=${G_V[3]##*=}"
    fi
@@ -81,23 +81,24 @@ function get_ip() {
 }
 
 if [[ "$1" == "" ]]; then
-echo -e "--------------------------------------------------------"
-echo -e "| Blockbook Docker Manager v1.1"
-echo -e "--------------------------------------------------------"
+echo -e "-----------------------------------------------------------------------"
+echo -e "| Blockbook Docker Manager v2.0"
+echo -e "-----------------------------------------------------------------------"
 echo -e "| Usage:"
-echo -e "| status <coin_name>  - show blockbook docker status"
-echo -e "| list <url>          - show coin list"
-echo -e "| update              - update blockbook docker image"
-echo -e "| exec <coin_name>    - login to docker image"
-echo -e "| create <coin_name>  - create docker blockbook"
-echo -e "| <coin_name>         - generate docker run commandline"
-echo -e "| clean <coin_name>   - removing blockbook"
-echo -e "--------------------------------------------------------"
+echo -e "| status <coin_name>               - show blockbook docker status"
+echo -e "| list <url>                       - show coin list"
+echo -e "| update                           - update blockbook docker image"
+echo -e "| exec <coin_name>                 - login to docker image"
+echo -e "| create <coin_name> <-e variable> - create docker blockbook"
+echo -e "| <coin_name> <-e variable>        - generate docker run commandline"
+echo -e "| clean <coin_name>                - removing blockbook"
+echo -e "| softdeploy <coin_name>           - updating image with date"
+echo -e "-----------------------------------------------------------------------"
 exit
 fi
 
 if [[ "$1" == "update" ]]; then
-  docker pull runonflux/blockbook-docker
+  docker pull xk4milx/blockbook-docker
   exit
 fi
 
@@ -126,7 +127,7 @@ if [[ "$1" == "clean" ]]; then
 fi
 
 setup
-if [[ "$1" == "create" ]]; then
+if [[ "$1" == "create" || "$1" == "softdeploy" ]]; then
   BLOCKBOOKCONFIG=$(curl -SsL https://raw.githubusercontent.com/$GIT_USER/$REPO/$TAG/configs/coins/$2.json 2>/dev/null)
 else
   BLOCKBOOKCONFIG=$(curl -SsL https://raw.githubusercontent.com/$GIT_USER/$REPO/$TAG/configs/coins/$1.json 2>/dev/null)
@@ -147,6 +148,10 @@ if [[ ! -d /home/$USER/fluxosblockbook_${2} && "$1" == "create" ]]; then
   echo -e "| COIN: $2, DIRNAME: fluxosblockbook_${2}"
   echo -e "---------------------------------------------------------------------------------------"
   mkdir /home/$USER/fluxosblockbook_${2}
+elif [[ -d /home/$USER/fluxosblockbook_${2} && "$1" == "softdeploy" ]]; then
+  echo -e "---------------------------------------------------------------------------------------"
+  echo -e "| COIN: $2, DIRNAME: fluxosblockbook_${2}"
+  echo -e "---------------------------------------------------------------------------------------"
 else
  echo -e "---------------------------------------------------------------------------------------"
  echo -e "| COIN: $1"
@@ -154,28 +159,32 @@ else
 fi
 
 #if [[ "$BLOCKBOOKPOSTINST" != "" && "$1" != "divi" && "$2" != "divi" ]]; then
-#  POSTINST="-e FETCH_FILE=${BLOCKBOOKPOSTINST##*/}"
+  #POSTINST="-e FETCH_FILE=${BLOCKBOOKPOSTINST##*/}"
 #fi
 
 get_ip
 if [[ "$1" == "create" ]]; then
- # PROTOCOL=$((jq .ipc.rpc_url_template | egrep -o 'http|ws') <<< $BLOCKBOOKCONFIG)
- # if [[ "$PROTOCOL" != "http" ]]; then
- #   RPC_URL_PROTOCOL="-e RPC_URL_PROTOCOL=$PROTOCOL"
- # fi
   EXTRAFLAGS="$3"
   echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT"
-  CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -v /home/$USER/fluxosblockbook_${2}:/root runonflux/blockbook-docker" | awk '$1=$1')
+  CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -v /home/$USER/fluxosblockbook_${2}:/root xk4milx/blockbook-docker" | awk '$1=$1')
+  echo -e "| $CMD"
+  bash -c "$CMD"
+  echo -e ""
+elif [[ "$1" == "softdeploy" ]]; then
+  echo -e "| Stopping continer..."
+  echo -e "| Removing image..."
+  echo -e "----------------------------------------------------------------------------------------"
+  docker stop fluxosblockbook-${2} > /dev/null 2>&1
+  docker rm fluxosblockbook-${2} > /dev/null 2>&1
+  EXTRAFLAGS="$3"
+  echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT"
+  CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -v /home/$USER/fluxosblockbook_${2}:/root xk4milx/blockbook-docker" | awk '$1=$1')
   echo -e "| $CMD"
   bash -c "$CMD"
   echo -e ""
 else
-  #PROTOCOL=$((jq .ipc.rpc_url_template | egrep -o 'http|ws') <<< $BLOCKBOOKCONFIG)
-  #if [[ "$PROTOCOL" != "http" ]]; then
-  #  RPC_URL_PROTOCOL="-e RPC_URL_PROTOCOL=$PROTOCOL"
-  #fi
   EXTRAFLAGS="$2"
   echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT (EMULATION ONLY)"
-  echo -e "| docker run -d --name fluxosblockbook-${1} -e COIN=${1} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -v /home/$USER/fluxosblockbook_${1}:/root runonflux/blockbook-docker" | awk '$1=$1'
+  echo -e "| docker run -d --name fluxosblockbook-${1} -e COIN=${1} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -v /home/$USER/fluxosblockbook_${1}:/root xk4milx/blockbook-docker" | awk '$1=$1'
   echo -e "----------------------------------------------------------------------------------------"
 fi

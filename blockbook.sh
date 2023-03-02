@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 RPC_HOST="${RPC_HOST:-localhost}"
 RPC_URL_PROTOCOL="${RPC_URL_PROTOCOL:-http}"
-CFG_FILE=/root/blockbook/build/blockchaincfg.json
-echo -e "| BLOCKBOOK LUNCHER v1.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+CFG_FILE=/root/blockchaincfg.json
+echo -e "| BLOCKBOOK LUNCHER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
 echo -e "---------------------------------------------------------------------------"
 if [[ "$DAEMON_CONFIG" != "AUTO" ]]; then
   echo -e "| Blockbook Settings: COIN=$COIN, RPC_USER=$RPC_USER, RPC_PASS=$RPC_PASS, RPC_PORT=$RPC_PORT, BLOCKBOOK_PORT=$BLOCKBOOK_PORT, RPC_HOST=$RPC_HOST, RPC_URL_PROTOCOL=$RPC_URL_PROTOCOL"
@@ -11,13 +11,12 @@ else
 fi
 echo -e "| Awaiting for Blockbook build..."
 while true; do
-   if [[ -f $CFG_FILE ]]; then
+   if [[ -f $CFG_FILE && -f $HOME/blockbook/blockbook ]]; then
      sleep 20
      break
    fi
-   sleep 180
+   sleep 20
 done
-
 if [[ "$BOOTSTRAP" == "1" && ! -f /root/BOOTSTRAP_LOCKED ]]; then
   echo -e "| Awaiting for bootstraping..."
   while true; do
@@ -40,7 +39,10 @@ if [[ ! -f /root/CONFIG_CRETED ]]; then
 else
   echo -e "| Blockchaincfg.json [LOCKED]..."
 fi
-cd /root/blockbook
+cd /opt/blockbook
 echo -e "| Starting Blockbook ($COIN)..."
-exec ./blockbook -sync -blockchaincfg=$CFG_FILE -debug -workers=${WORKERS:-1} -dbcache=${DBCACHE:-500} -public=:${BLOCKBOOK_PORT} -logtostderr
+if [[ ! -d /root/blockbook-db ]]; then
+  mkdir -p /root/blockbook-db
+fi
+exec ./blockbook -sync -blockchaincfg=$CFG_FILE -datadir=/root/blockbook-db -debug -workers=${WORKERS:-1} -dbcache=${DBCACHE:-500} -public=:${BLOCKBOOK_PORT} -logtostderr
 echo -e "---------------------------------------------------------------------------"

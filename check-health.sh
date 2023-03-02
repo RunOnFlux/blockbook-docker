@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
  CONFIG_FILE=${CONFIG_FILE:-$COIN}
  CONFIG_DIR=${CONFIG_DIR:-$COIN}
 ### BlockBook checking
@@ -8,7 +8,7 @@
  blockbook=$(jq -r .blockbook.bestHeight <<< "$blockbookapi")
  if [[ $bloks != "" && $blockbook != "" ]]; then  
    DAEMON_SIZE=$(du -sb /root/$CONFIG_DIR | awk '{printf("%0.2f GB\n", $1/1000/1000/1000)}')
-   BLOCKBOOK_SIZE=$(du -sb /root/blockbook/data | awk '{printf("%0.2f GB\n", $1/1000/1000/1000)}')
+   BLOCKBOOK_SIZE=$(du -sb /root/blockbook-db | awk '{printf("%0.2f GB\n", $1/1000/1000/1000)}')
    if [[ $headers != "" && $headers != "null" ]]; then
      progress1=$(awk 'BEGIN {total=ARGV[1] / ARGV[2]; printf("%.2f", total*100)}' $bloks $headers)
      progress2=$(awk 'BEGIN {total=ARGV[1] / ARGV[2]; printf("%.2f", total*100)}' $blockbook $headers)

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 function parse_template(){
  if [[ $(jq -r .$2 /root/$3.json 2>/dev/null) != "null" ]]; then
   return

@@ -1,12 +1,27 @@
 # Multicoin Blockbook Explorer
 
-### Pull latest image
-```shell script
-$ docker pull runonflux/blockbook-docker
+### USAGE
+```
+bash -i <(curl -s https://raw.githubusercontent.com/RunOnFlux/blockbook-docker/master/blockbook-docker_manager.sh)
+```
+```
+-----------------------------------------------------------------------
+| Blockbook Docker Manager v2.0
+-----------------------------------------------------------------------
+| Usage:
+| status <coin_name>               - show blockbook docker status
+| list <url>                       - show coin list
+| update                           - update blockbook docker image
+| exec <coin_name>                 - login to docker image
+| create <coin_name> <-e variable> - create docker blockbook
+| <coin_name> <-e variable>        - generate docker run commandline
+| clean <coin_name>                - removing blockbook
+| softdeploy <coin_name>           - updating image with date
+-----------------------------------------------------------------------
 ```
 ### Deploy container
-```shell script
-docker run -d --name fluxblockbook-flux -e COIN=flux -e BOOTSTRAP=1 -e EXTRACONFIG="addnode=explorer.zelcash.online\naddnode=explorer.runonflux.io\naddnode=blockbook.runonflux.io\naddnode=explorer.flux.zelcore.io" -e BLOCKBOOK_PORT=9158 -e -p 7799:9158 -v /<local_path>:/root runonflux/blockbook-docker
+```
+bash -i <(curl -s https://raw.githubusercontent.com/RunOnFlux/blockbook-docker/master/blockbook-docker_manager.sh) create flux
 ```
 
 ### Environment Variables
@@ -33,7 +48,6 @@ of this parameter has the format `<VARIABLE_NAME>=<VALUE>`.
 |`CLIFLAGS`| Config flags for daemon | `YES` <br />when using CLI mode | `unset` |
 |`DAEMON_URL`| Download URL for daemon .tar.gz archive | `NO` | `AUTO` <br />`FROM BLOCKBOOK CONFIG` |
 |`DAEMON_CONFIG`| Generate daemon config using blockbook template | `NO` | `AUTO` <br />`FROM BLOCKBOOK` |
-|`FETCH_FILE`| Name of fetch parms script <br /> Example: "fetch-params.sh" | `NO` | `unset` |
 |`LOG_SIZE_LIMIT`| Size limit for log cleaner in MB | `NO` | `40` |
 |`BLOCKBOOK_PORT`| Port for blockbook. To get correct port check: <br /> https://github.com/trezor/blockbook/blob/master/docs/ports.md | `YES` | `unset` |
 |`BOOTSTRAP`| Enable daemon bootstrapping <br /> DISABLED=0, ENABLED=1 | `NO` | `0` |
@@ -41,4 +55,4 @@ of this parameter has the format `<VARIABLE_NAME>=<VALUE>`.
 |`B_TIMEOUT`| Bootstrap speed test timeout in sec | `NO` | `6` |
 |`B_SERVERS_LIST`| Servers list for bootstraping <br /> Example: `'("http://cdn-14.runonflux.io/apps/fluxshare/getfile/" "http://cdn-15.runonflux.io/apps/fluxshare/getfile/")'` | `NO` | `BUILD-IN SERVERS LIST` |
 
-v1.0.1
+v2.0
