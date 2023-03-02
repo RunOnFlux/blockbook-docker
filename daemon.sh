@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-#color codes
-#RED='\033[1;31m'
-#$YELLOW='\033[1;33m'
-#BLUE="\\033[38;5;27m"
-#SEA="\\033[38;5;49m"
-#GREEN='\033[1;32m'
-#CYAN='\033[1;36m'
-#NC='\033[0m'
 server_offline="0"
 failed_counter="0"
 CONFIG_FILE=${CONFIG_FILE:-$COIN}
@@ -107,7 +99,6 @@ function extract_daemon() {
   return 0
 }
 
-
 function cli_search(){
   if [[ "$CLI_NAME" == "" ]]; then
     echo -e "| Searching for CLI binary..."
@@ -118,7 +109,6 @@ function cli_search(){
     fi
   fi
 }
-
 
 function tar_file_unpack()
 {
@@ -354,13 +344,6 @@ EOF
 fi
 cd /
 sleep 5
-
-#if [[ "$FETCH_FILE" != "" ]]; then
-#  if [[ ! -d /root/.zcash-params ]]; then
-#    echo -e "| Installing fetch-params..."
-#    bash -c "$FETCH_FILE" > /dev/null 2>&1 && sleep 2
-#  fi
-#fi
 
 if [[ "$CONFIG" == "0" || "$CONFIG" == "" ]]; then
   echo -e "| Starting $COIN daemon (Config: DISABLED)..."
