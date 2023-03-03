@@ -19,7 +19,7 @@ function extract_daemon() {
 
 if [[ "$1" == "" ]]; then
   echo -e "---------------------------------------------------------------------"
-  echo -e "| Blockbook Untils v1.0"
+  echo -e "| Blockbook Utils v1.0"
   echo -e "---------------------------------------------------------------------"
   echo -e "| Usage:"
   echo -e "| db_backup                  - create blockbook db backup"
