@@ -6,6 +6,12 @@ function tar_file_pack() {
 	tar -czf - $1 | (pv -p --timer --rate --bytes > $2) 2>&1
 }
 
+function tar_file_unpack()
+{
+    echo -e "| Unpacking archive file..."
+    pv $1 | tar -zx -C $2
+}
+
 function extract_daemon() {
   if [[ ! -d /tmp/backend ]]; then
     echo -e "| Creating directory..."
@@ -23,7 +29,7 @@ if [[ "$1" == "" ]]; then
   echo -e "---------------------------------------------------------------------"
   echo -e "| Usage:"
   echo -e "| db_backup                  - create blockbook db backup"
-  echo -e "| db_restore                 - restore blockbook db"
+  echo -e "| db_restore -archive        - restore blockbook db"
   echo -e "| db_gzip                    - archivize blockbook db"
   echo -e "| db_fix                     - fix corrupted blockbook db"
   echo -e "| db_clean                   - wipe blockbook db"
@@ -45,15 +51,15 @@ if [[ "$1" == "logs" ]]; then
   echo -e "-----------------------------------------------------------------------------------------------"
   echo -e "| BLOCKBOOK LOGS CHECKER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "-----------------------------------------------------------------------------------------------"
-  echo -e "| CHECKING LOGS GENERETED BY BUILD.SH"
+  echo -e "| CHECKING LOGS GENERETED BY build.sh"
   echo -e "----------------------------------------------------------------------------------[START BUILD]"
   supervisorctl tail build
   echo -e "------------------------------------------------------------------------------------[END BUILD]"
-  echo -e "| CHECKING LOGS GENERETED BY DAEMON.SH"
+  echo -e "| CHECKING LOGS GENERETED BY daemon.sh"
   echo -e "---------------------------------------------------------------------------------[START DAEMON]"
   supervisorctl tail daemon
   echo -e "-----------------------------------------------------------------------------------[END DAEMON]"
-  echo -e "| CHECKING LOGS GENERETED BY BLOCKBOOK.SH"
+  echo -e "| CHECKING LOGS GENERETED BY blockbook.sh"
   echo -e "------------------------------------------------------------------------------[START BLOCKBOOK]"
   supervisorctl tail blockbook
   echo -e "--------------------------------------------------------------------------------[END BLOCKBOOK]"
@@ -126,6 +132,17 @@ if [[ "$1" == "db_restore" ]]; then
   echo -e "--------------------------------------------------"
   echo -e "| Stopping blockbook service..."
   supervisorctl stop blockbook > /dev/null 2>&1
+  if [[ "$2" == "-archive" ]]; then
+    if [[ -f /root/blockbook-$COIN-db-backup.tar.gz ]]; then
+      rm -rf /root/blockbook_backup
+      tar_file_unpack "/root/blockbook-$COIN-db-backup.tar.gz" "/root"
+    fi
+  fi
+  if [[ ! -d /root/blockbook_backup/rocksdb.bk ]]; then
+    echo -e "| Backup directory not exist, operation aborted..."
+    echo -e "--------------------------------------------------"
+    exit
+  fi
   echo -e "| Restoring the database..."
   ./opt/rocksdb/ldb --db=/root/blockbook-db restore --backup_dir=/root/blockbook_backup/rocksdb.bk
   echo -e "| Starting blockbook service..."
@@ -133,6 +150,7 @@ if [[ "$1" == "db_restore" ]]; then
   echo -e "--------------------------------------------------"
   exit
 fi
+
 
 
 if [[ "$1" == "db_clean" ]]; then
