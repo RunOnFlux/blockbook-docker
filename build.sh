@@ -83,7 +83,7 @@ echo -e "| CRON JOB CHECKING..."
 if [[ "$crontab_check" == "0" ]]; then
   echo -e "| ADDED CRONE JOB FOR LOG CLEANER..."
   echo -e "-----------------------------------------------------"
-  (crontab -l -u root 2>/dev/null; echo "0 0 1-30/5 * *  /bin/bash /utils.sh > /tmp/clean_output.log 2>&1") | crontab -
+  (crontab -l -u root 2>/dev/null; echo "0 0 1-30/5 * *  /bin/bash /utils.sh log_clean > /tmp/clean_output.log 2>&1") | crontab -
 else
   echo -e "| CRONE JOB ALREADY EXIST..."
   echo -e "-----------------------------------------------------"
