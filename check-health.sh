@@ -2,7 +2,7 @@
  CONFIG_FILE=${CONFIG_FILE:-$COIN}
  CONFIG_DIR=${CONFIG_DIR:-$COIN}
 ### BlockBook checking
- blockbookapi=$(curl -sSL  http://localhost:$BLOCKBOOK_PORT/api 2>/dev/null | jq .)
+ blockbookapi=$(curl -sSL -m 10 http://localhost:$BLOCKBOOK_PORT/api 2>/dev/null | jq .)
  bloks=$(jq -r .backend.blocks <<< "$blockbookapi")
  headers=$(jq -r .backend.headers <<< "$blockbookapi")
  blockbook=$(jq -r .blockbook.bestHeight <<< "$blockbookapi")
