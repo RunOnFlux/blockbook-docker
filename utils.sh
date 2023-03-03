@@ -17,6 +17,24 @@ function extract_daemon() {
   return 0
 }
 
+if [[ "$1" == "" ]]; then
+  echo -e "---------------------------------------------------------------------"
+  echo -e "| Blockbook Untils v1.0"
+  echo -e "---------------------------------------------------------------------"
+  echo -e "| Usage:"
+  echo -e "| db_backup                  - create blockbook db backup"
+  echo -e "| db_restore                 - restore blockbook db"
+  echo -e "| db_gzip                    - archivize blockbook db"
+  echo -e "| db_fix                     - fix corrupted blockbook db"
+  echo -e "| db_clean                   - wipe blockbook db"
+  echo -e "| update_daemon <url>        - update daemon binary"
+  echo -e "| backend_clean              - wipe backend directory"
+  echo -e "| log_clean                  - removing logs"
+  echo -e "| logs <number>              - show all logs"
+  echo -e "--------------------------------------------------------------------"
+  exit
+fi
+
 if [[ "$1" == "logs" ]]; then
   if [[ "$2" == "" ]]; then
     LINE=50
@@ -172,28 +190,30 @@ if [[ "$1" == "backend_clean" ]]; then
   exit
 fi
 
-CLEAN=0
-echo -e "| LOG CLEANER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
-echo -e "--------------------------------------------------"
- LOG_SIZE_LIMIT=${LOG_SIZE_LIMIT:-20}
- LOG_LIST=($(find /root -type f \( -name "$COIN*.log" -o -name "debug.log" -o -name "blockbook.log*" -o -name "*.log" \)))
- LENGTH=${#LOG_LIST[@]}
- for (( j=0; j<${LENGTH}; j++ ));
- do
-  LOG_PATH="${LOG_LIST[$j]}"
-  SIZE=$(ls -l --b=M  $LOG_PATH | cut -d " " -f5)
-  #echo -e "| File: ${LOG_PATH} SIZE: ${SIZE}"
-  if [[ $(egrep -o '[0-9]+' <<< $SIZE) -gt $LOG_SIZE_LIMIT ]]; then
-    echo -e "| FOUND: ${LOG_PATH} SIZE: ${SIZE}"
-    LOG_FILE=${LOG_PATH##*/}
-    echo -e "| File ${LOG_FILE} reached ${LOG_SIZE_LIMIT}M limit, file was cleaned!"
-    if [[ -f $LOG_PATH ]]; then
-      echo "" > $LOG_PATH > /dev/null 2>&1
-    fi
-    CLEAN=1
-  fi
- done
- if [[ "$CLEAN" == "0" ]]; then
+if [[ "$1" == "log_clean" ]]; then
+  CLEAN=0
+  echo -e "| LOG CLEANER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+  echo -e "--------------------------------------------------"
+  LOG_SIZE_LIMIT=${LOG_SIZE_LIMIT:-20}
+  LOG_LIST=($(find /root -type f \( -name "$COIN*.log" -o -name "debug.log" -o -name "blockbook.log*" -o -name "*.log" \)))
+  LENGTH=${#LOG_LIST[@]}
+  for (( j=0; j<${LENGTH}; j++ ));
+  do
+   LOG_PATH="${LOG_LIST[$j]}"
+   SIZE=$(ls -l --b=M  $LOG_PATH | cut -d " " -f5)
+   #echo -e "| File: ${LOG_PATH} SIZE: ${SIZE}"
+   if [[ $(egrep -o '[0-9]+' <<< $SIZE) -gt $LOG_SIZE_LIMIT ]]; then
+     echo -e "| FOUND: ${LOG_PATH} SIZE: ${SIZE}"
+     LOG_FILE=${LOG_PATH##*/}
+     echo -e "| File ${LOG_FILE} reached ${LOG_SIZE_LIMIT}M limit, file was cleaned!"
+     if [[ -f $LOG_PATH ]]; then
+       echo "" > $LOG_PATH > /dev/null 2>&1
+     fi
+     CLEAN=1
+   fi
+  done
+  if [[ "$CLEAN" == "0" ]]; then
    echo -e "| All logs belown ${LOG_SIZE_LIMIT}M limit..."
- fi
- echo -e "--------------------------------------------------"
+  fi
+  echo -e "--------------------------------------------------"
+fi
