@@ -23,9 +23,22 @@ if [[ "$1" == "logs" ]]; then
   else
     LINE=$2
   fi
+
   echo -e "-----------------------------------------------------------------------------------------------"
   echo -e "| BLOCKBOOK LOGS CHECKER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "-----------------------------------------------------------------------------------------------"
+  echo -e "| CHECKING LOGS GENERETED BY BUILD.SH"
+  echo -e "----------------------------------------------------------------------------------[START BUILD]"
+  supervisorctl tail build
+  echo -e "------------------------------------------------------------------------------------[END BUILD]"
+  echo -e "| CHECKING LOGS GENERETED BY DAEMON.SH"
+  echo -e "---------------------------------------------------------------------------------[START DAEMON]"
+  supervisorctl tail daemon
+  echo -e "-----------------------------------------------------------------------------------[END DAEMON]"
+  echo -e "| CHECKING LOGS GENERETED BY BLOCKBOOK.SH"
+  echo -e "------------------------------------------------------------------------------[START BLOCKBOOK]"
+  supervisorctl tail blockbook
+  echo -e "--------------------------------------------------------------------------------[END BLOCKBOOK]"
   if [[ -f /root/$CONFIG_DIR/backend/debug.log ]]; then
     echo -e "| File: /root/$CONFIG_DIR/backend/debug.log"
     echo -e "-----------------------------------------------------------------------------------------------"
