@@ -24,20 +24,22 @@ function extract_daemon() {
 }
 
 if [[ "$1" == "" ]]; then
-  echo -e "---------------------------------------------------------------------"
+  echo -e "-------------------------------------------------------------------------------"
   echo -e "| Blockbook Utils v1.0"
-  echo -e "---------------------------------------------------------------------"
+  echo -e "-------------------------------------------------------------------------------"
   echo -e "| Usage:"
-  echo -e "| db_backup                  - create blockbook db backup"
-  echo -e "| db_restore -archive        - restore blockbook db"
-  echo -e "| db_gzip                    - archivize blockbook db"
-  echo -e "| db_fix                     - fix corrupted blockbook db"
-  echo -e "| db_clean                   - wipe blockbook db"
-  echo -e "| update_daemon <url>        - update daemon binary"
-  echo -e "| backend_clean              - wipe backend directory"
-  echo -e "| log_clean                  - removing logs"
-  echo -e "| logs <number>              - show all logs"
-  echo -e "--------------------------------------------------------------------"
+  echo -e "| db_backup                              - create blockbook db backup"
+  echo -e "| db_restore (-archive)/(-remote <url>)  - restore blockbook db"
+  echo -e "| db_gzip                                - archivize blockbook db"
+  echo -e "| db_fix                                 - fix corrupted blockbook db"
+  echo -e "| db_clean                               - wipe blockbook db"
+  echo -e "| update_daemon <url>                    - update daemon binary"
+  echo -e "| backend_backup                         - create backend backup archive"
+  echo -e "| backend_restore (-remote <url>)        - restore backend from backup archive"
+  echo -e "| backend_clean                          - wipe backend directory"
+  echo -e "| log_clean                              - removing logs"
+  echo -e "| logs <number>                          - show all logs"
+  echo -e "------------------------------------------------------------------------------"
   exit
 fi
 
@@ -81,6 +83,7 @@ if [[ "$1" == "logs" ]]; then
   exit
 fi
 
+
 if [[ "$1" == "db_gzip" ]]; then
   echo -e "| BLOCKBOOK DB GZIP v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "--------------------------------------------------"
@@ -120,6 +123,7 @@ if [[ "$1" == "db_backup" ]]; then
   else
     mkdir -p /root/blockbook_backup
   fi
+  cd /
   ./opt/rocksdb/ldb --db=/root/blockbook-db backup --backup_dir=/root/blockbook_backup/rocksdb.bk
   echo -e "| Starting blockbook service..."
   supervisorctl start blockbook > /dev/null 2>&1
@@ -132,26 +136,44 @@ if [[ "$1" == "db_restore" ]]; then
   echo -e "--------------------------------------------------"
   echo -e "| Stopping blockbook service..."
   supervisorctl stop blockbook > /dev/null 2>&1
+  
   if [[ "$2" == "-archive" ]]; then
     if [[ -f /root/blockbook-$COIN-db-backup.tar.gz ]]; then
       rm -rf /root/blockbook_backup
       tar_file_unpack "/root/blockbook-$COIN-db-backup.tar.gz" "/root"
     fi
   fi
+  
+  if [[ "$2" == "-remote" && "$3" != "" ]]; then
+   cd /root
+   if [[ -f /root/blockbook-$COIN-db-backup.tar.gz ]]; then
+     rm -rf /root/blockbook-$COIN-db-backup.tar.gz
+   fi
+   echo -e "| Downloading file: $3"
+   wget -q --show-progress -c -t 5 $3 -O blockbook-$COIN-db-backup.tar.gz
+   if [[ $? -ne 0 ]]; then
+     echo -e "| Download archive backup failed, operation aborted..."
+     rm -rf /root/backend-$COIN-backup.tar.gz
+     echo -e "--------------------------------------------------"
+     exit
+    fi
+    rm -rf /root/blockbook_backup
+    tar_file_unpack "/root/blockbook-$COIN-db-backup.tar.gz" "/root"
+  fi
+
   if [[ ! -d /root/blockbook_backup/rocksdb.bk ]]; then
     echo -e "| Backup directory not exist, operation aborted..."
     echo -e "--------------------------------------------------"
     exit
   fi
   echo -e "| Restoring the database..."
+  cd /
   ./opt/rocksdb/ldb --db=/root/blockbook-db restore --backup_dir=/root/blockbook_backup/rocksdb.bk
   echo -e "| Starting blockbook service..."
   supervisorctl start blockbook > /dev/null 2>&1
   echo -e "--------------------------------------------------"
   exit
 fi
-
-
 
 if [[ "$1" == "db_clean" ]]; then
   echo -e "| BLOCKBOOK DB CLEANER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
@@ -189,6 +211,71 @@ if [[ "$1" == "update_daemon" ]]; then
   echo -e "| Installing daemon..."
   install -m 0755 -o root -g root -t /usr/local/bin backend/*
   rm -rf /tmp/*
+  echo -e "| Starting daemon service..."
+  supervisorctl start daemon > /dev/null 2>&1
+  echo -e "--------------------------------------------------"
+  exit
+fi
+
+if [[ "$1" == "backend_backup" ]]; then
+  echo -e "| BLOCKBOOK BACKEND BACKUP v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+  echo -e "--------------------------------------------------"
+  echo -e "| Checking backup file..."
+  if [[ -f /root/backend-$COIN-backup.tar.gz ]]; then
+    rm -rf  /root/backend-$COIN-backup.tar.gz
+  fi
+  echo -e "| Stopping daemon service..."
+  supervisorctl stop daemon > /dev/null 2>&1
+  cd /root/$CONFIG_DIR
+  tar_file_pack "backend" "/root/backend-$COIN-backup.tar.gz"
+  if [[ -f /root/backend-$COIN-backup.tar.gz ]]; then
+   echo -e "| Backup archive created, path: /root/backend-$COIN-backup.tar.gz"
+  else
+   echo -e "| Backup not created, operation failed..."
+  fi
+  echo -e "| Starting daemon service..."
+  supervisorctl start daemon > /dev/null 2>&1
+  echo -e "--------------------------------------------------"
+  exit
+fi
+
+if [[ "$1" == "backend_restore" ]]; then
+  echo -e "| BLOCKBOOK BACKEND RESTORE v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+  echo -e "--------------------------------------------------"
+  
+  if [[ "$2" == "-remote" && "$3" != "" ]]; then
+   if [[ -f /root/backend-$COIN-backup.tar.gz ]]; then
+     rm -rf /root/backend-$COIN-backup.tar.gz
+   fi
+   cd /root
+   echo -e "| Downloading file: $3"
+   wget -q --show-progress -c -t 5 $3 -O backend-$COIN-backup.tar.gz
+   if [[ $? -ne 0 ]]; then
+    echo -e "| Download archive backup failed, operation aborted..."
+    rm -rf /root/backend-$COIN-backup.tar.gz
+    echo -e "--------------------------------------------------"
+    exit
+   fi
+  else
+   echo -e "| Checking backup file..."
+   if [[ ! -f /root/backend-$COIN-backup.tar.gz ]]; then
+     echo -e "| Backup file not exist, operation aborted..."
+     echo -e "--------------------------------------------------"
+     exit
+   fi
+  fi
+  cd /root/$CONFIG_DIR
+  echo -e "| Stopping daemon service..."
+  supervisorctl stop daemon > /dev/null 2>&1
+  echo -e "| Cleaning backend datadir..."
+  rm -rf /root/$CONFIG_DIR/backend
+  tar_file_unpack "/root/backend-$COIN-backup.tar.gz" "/root/$CONFIG_DIR"
+  if [[ -d /root/$CONFIG_DIR/backend ]]; then
+   echo -e "| Restore finished, source: /root/backend-$COIN-backup.tar.gz"
+  else
+   echo -e "| Restore failed..."
+   mkdir -p /root/$CONFIG_DIR/backend
+  fi
   echo -e "| Starting daemon service..."
   supervisorctl start daemon > /dev/null 2>&1
   echo -e "--------------------------------------------------"
