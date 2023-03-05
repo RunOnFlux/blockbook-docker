@@ -47,6 +47,7 @@ function blockbook_install() {
     else
       echo -e "| Blockbook build [FAILED]..."
       rm -rf $HOME/blockbook
+      rm -rf $HOME/rocksdb
     fi 
     x=$(( $x + 1 ))
   done
