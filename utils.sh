@@ -55,15 +55,15 @@ if [[ "$1" == "logs" ]]; then
   echo -e "-----------------------------------------------------------------------------------------------"
   echo -e "| BLOCKBOOK LOGS CHECKER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "-----------------------------------------------------------------------------------------------"
-  echo -e "| CHECKING LOGS GENERETED BY BUILD.SH"
+  echo -e "| CHECKING BUILD LOGS..."
   echo -e "----------------------------------------------------------------------------------[START BUILD]"
   supervisorctl tail build
   echo -e "------------------------------------------------------------------------------------[END BUILD]"
-  echo -e "| CHECKING LOGS GENERETED BY DAEMON.SH"
+  echo -e "| CHECKING DAEMON LOGS..."
   echo -e "---------------------------------------------------------------------------------[START DAEMON]"
   supervisorctl tail daemon
   echo -e "-----------------------------------------------------------------------------------[END DAEMON]"
-  echo -e "| CHECKING LOGS GENERETED BY BLOCKBOOK.SH"
+  echo -e "| CHECKING BLOCKBOOK LOGS..."
   echo -e "------------------------------------------------------------------------------[START BLOCKBOOK]"
   supervisorctl tail blockbook
   echo -e "--------------------------------------------------------------------------------[END BLOCKBOOK]"
@@ -198,6 +198,7 @@ if [[ "$1" == "update_daemon" ]]; then
     echo -e "--------------------------------------------------"
     exit
   fi
+  echo "$(jq -r --arg key "daemon_url" --arg value "$DAEMON_URL" '.[$key]=$value' /root/daemon_config.json)" > /root/daemon_config.json
   echo -e "| Stopping daemon service..."
   supervisorctl stop daemon > /dev/null 2>&1
   if [[ "$BINARY_NAME" == "" ]]; then
