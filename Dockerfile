@@ -64,6 +64,6 @@ RUN chmod 755 /blockbook.sh /daemon.sh /build.sh /check-health.sh /consensus.sh 
 RUN mkdir -p /var/log/supervisor
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 VOLUME /root
-EXPOSE $BLOCKBOOK_PORT
+EXPOSE $BLOCKBOOK_PORT 1337
 HEALTHCHECK --start-period=10m --interval=4m --retries=5 --timeout=40s CMD ./check-health.sh
 ENTRYPOINT ["/usr/bin/supervisord"]
