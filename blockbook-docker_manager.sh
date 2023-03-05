@@ -166,7 +166,7 @@ get_ip
 if [[ "$1" == "create" ]]; then
   EXTRAFLAGS="$3"
   echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT"
-  CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -v /home/$USER/fluxosblockbook_${2}:/root runonflux/blockbook-docker" | awk '$1=$1')
+  CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -p $((OUT_PORT-155)):1337 -v /home/$USER/fluxosblockbook_${2}:/root runonflux/blockbook-docker" | awk '$1=$1')
   echo -e "| $CMD"
   bash -c "$CMD"
   echo -e ""
@@ -178,13 +178,13 @@ elif [[ "$1" == "softdeploy" ]]; then
   docker rm fluxosblockbook-${2} > /dev/null 2>&1
   EXTRAFLAGS="$3"
   echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT"
-  CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -v /home/$USER/fluxosblockbook_${2}:/root runonflux/blockbook-docker" | awk '$1=$1')
+  CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -p $((OUT_PORT-155)):1337 -v /home/$USER/fluxosblockbook_${2}:/root runonflux/blockbook-docker" | awk '$1=$1')
   echo -e "| $CMD"
   bash -c "$CMD"
   echo -e ""
 else
   EXTRAFLAGS="$2"
   echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT (EMULATION ONLY)"
-  echo -e "| docker run -d --name fluxosblockbook-${1} -e COIN=${1} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -v /home/$USER/fluxosblockbook_${1}:/root runonflux/blockbook-docker" | awk '$1=$1'
+  echo -e "| docker run -d --name fluxosblockbook-${1} -e COIN=${1} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -p $((OUT_PORT-155)):1337 -v /home/$USER/fluxosblockbook_${1}:/root runonflux/blockbook-docker" | awk '$1=$1'
   echo -e "----------------------------------------------------------------------------------------"
 fi
