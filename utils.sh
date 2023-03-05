@@ -24,9 +24,9 @@ function extract_daemon() {
 }
 
 if [[ "$1" == "" ]]; then
-  echo -e "-------------------------------------------------------------------------------"
+  echo -e "-----------------------------------------------------------------------------------"
   echo -e "| Blockbook Utils v1.0"
-  echo -e "-------------------------------------------------------------------------------"
+  echo -e "-----------------------------------------------------------------------------------"
   echo -e "| Usage:"
   echo -e "| db_backup                              - create blockbook db backup"
   echo -e "| db_restore (-archive)/(-remote <url>)  - restore blockbook db"
@@ -37,9 +37,11 @@ if [[ "$1" == "" ]]; then
   echo -e "| backend_backup                         - create backend backup archive"
   echo -e "| backend_restore (-remote <url>)        - restore backend from backup archive"
   echo -e "| backend_clean                          - wipe backend directory"
+  echo -e "| backup_share                           - share backup archive directory via http"
+  echo -e "| backup_archive                         - create backup archive directory"
   echo -e "| log_clean                              - removing logs"
   echo -e "| logs <number>                          - show all logs"
-  echo -e "------------------------------------------------------------------------------"
+  echo -e "----------------------------------------------------------------------------------"
   exit
 fi
 
@@ -53,15 +55,15 @@ if [[ "$1" == "logs" ]]; then
   echo -e "-----------------------------------------------------------------------------------------------"
   echo -e "| BLOCKBOOK LOGS CHECKER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "-----------------------------------------------------------------------------------------------"
-  echo -e "| CHECKING LOGS GENERETED BY build.sh"
+  echo -e "| CHECKING LOGS GENERETED BY BUILD.SH"
   echo -e "----------------------------------------------------------------------------------[START BUILD]"
   supervisorctl tail build
   echo -e "------------------------------------------------------------------------------------[END BUILD]"
-  echo -e "| CHECKING LOGS GENERETED BY daemon.sh"
+  echo -e "| CHECKING LOGS GENERETED BY DAEMON.SH"
   echo -e "---------------------------------------------------------------------------------[START DAEMON]"
   supervisorctl tail daemon
   echo -e "-----------------------------------------------------------------------------------[END DAEMON]"
-  echo -e "| CHECKING LOGS GENERETED BY blockbook.sh"
+  echo -e "| CHECKING LOGS GENERETED BY BLOCKBOOK.SH"
   echo -e "------------------------------------------------------------------------------[START BLOCKBOOK]"
   supervisorctl tail blockbook
   echo -e "--------------------------------------------------------------------------------[END BLOCKBOOK]"
@@ -82,7 +84,6 @@ if [[ "$1" == "logs" ]]; then
   echo -e "----------------------------------------------------------------------------------------------"
   exit
 fi
-
 
 if [[ "$1" == "db_gzip" ]]; then
   echo -e "| BLOCKBOOK DB GZIP v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
@@ -281,6 +282,38 @@ if [[ "$1" == "backend_restore" ]]; then
   echo -e "--------------------------------------------------"
   exit
 fi
+
+if [[ "$1" == "backup_archive" ]]; then
+  echo -e "| BLOCKBOOK BACKUP ARCHIVE v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+  echo -e "--------------------------------------------------"
+  timestamp=$(date +%s)
+  mkdir -p /root/backup_archive > /dev/null 2>&1
+  if [[ -f /root/backend-$COIN-backup.tar.gz ]]; then
+    echo -e "| File backend-$COIN-backup.tar.gz moved to /root/backup_archive"
+    mv /root/backend-$COIN-backup.tar.gz /root/backup_archive/backend-$COIN-backup-${timestamp}.tar.gz
+  fi
+  if [[ -f /root/blockboook-$COIN-db-backup.tar.gz ]]; then
+    echo -e "| File blockboook-$COIN-db-backup.tar.gz moved to /root/backup_archive"
+    mv /root/blockboook-$COIN-db-backup.tar.gz /root/backup_archive/blockboook-$COIN-db-backup-${timestamp}.tar.gz
+  fi
+  echo -e "--------------------------------------------------"
+  exit
+fi
+
+if [[ "$1" == "backup_share" ]]; then
+  echo -e "| BLOCKBOOK BACKUP HTTP SERVER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+  echo -e "--------------------------------------------------"
+  if [[ -d /root/backup_archive ]]; then
+    echo -n "| "
+    cd /root/backup_archive
+    python3 -m http.server 1337
+  else
+    echo -e "Backup directory not exist, operation aborted..."
+  fi
+  echo -e "--------------------------------------------------"
+  exit
+fi
+
 
 if [[ "$1" == "backend_clean" ]]; then
   echo -e "| BACKEND CLEANER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
