@@ -303,7 +303,7 @@ if [[ "$1" == "backup_archive" ]]; then
     archive=1
   fi
   if [[ "$archive" == "0" ]]; then
-    echo -e "Backup archives not found, operation aborted!"
+    echo -e "| Backup archives not found, operation aborted!"
   fi
   echo -e "--------------------------------------------------"
   exit
