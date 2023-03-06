@@ -30,7 +30,7 @@ if [[ "$1" == "" ]]; then
   echo -e "| Usage:"
   echo -e "| db_backup                              - create blockbook database backup"
   echo -e "| db_restore (-archive)/(-remote <url>)  - restore blockbook database"
-  echo -e "| db_gzip                                - archivize blockbook database"
+  echo -e "| db_gzip                                - gzip blockbook database"
   echo -e "| db_fix                                 - fix corrupted blockbook database"
   echo -e "| db_clean                               - remove blockbook database"
   echo -e "| update_daemon <url>                    - update daemon binary"
@@ -40,7 +40,7 @@ if [[ "$1" == "" ]]; then
   echo -e "| backup_share                           - share backup archive directory via http"
   echo -e "| backup_archive                         - create backup archive directory"
   echo -e "| archive_clean                          - remove backup archive directory content"
-  echo -e "| log_clean                              - removing logs"
+  echo -e "| log_clean                              - remove logs"
   echo -e "| logs <number>                          - show all logs"
   echo -e "----------------------------------------------------------------------------------"
   exit
