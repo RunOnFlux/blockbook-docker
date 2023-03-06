@@ -28,17 +28,18 @@ if [[ "$1" == "" ]]; then
   echo -e "| Blockbook Utils v1.0"
   echo -e "-----------------------------------------------------------------------------------"
   echo -e "| Usage:"
-  echo -e "| db_backup                              - create blockbook db backup"
-  echo -e "| db_restore (-archive)/(-remote <url>)  - restore blockbook db"
-  echo -e "| db_gzip                                - archivize blockbook db"
-  echo -e "| db_fix                                 - fix corrupted blockbook db"
-  echo -e "| db_clean                               - wipe blockbook db"
+  echo -e "| db_backup                              - create blockbook database backup"
+  echo -e "| db_restore (-archive)/(-remote <url>)  - restore blockbook database"
+  echo -e "| db_gzip                                - archivize blockbook database"
+  echo -e "| db_fix                                 - fix corrupted blockbook database"
+  echo -e "| db_clean                               - remove blockbook database"
   echo -e "| update_daemon <url>                    - update daemon binary"
   echo -e "| backend_backup                         - create backend backup archive"
   echo -e "| backend_restore (-remote <url>)        - restore backend from backup archive"
-  echo -e "| backend_clean                          - wipe backend directory"
+  echo -e "| backend_clean                          - remove backend directory content"
   echo -e "| backup_share                           - share backup archive directory via http"
   echo -e "| backup_archive                         - create backup archive directory"
+  echo -e "| archive_clean                          - remove backup archive directory content"
   echo -e "| log_clean                              - removing logs"
   echo -e "| logs <number>                          - show all logs"
   echo -e "----------------------------------------------------------------------------------"
@@ -57,15 +58,15 @@ if [[ "$1" == "logs" ]]; then
   echo -e "-----------------------------------------------------------------------------------------------"
   echo -e "| CHECKING BUILD LOGS..."
   echo -e "----------------------------------------------------------------------------------[START BUILD]"
-  supervisorctl tail build
+  supervisorctl tail build | tail -n${LINE}
   echo -e "------------------------------------------------------------------------------------[END BUILD]"
   echo -e "| CHECKING DAEMON LOGS..."
   echo -e "---------------------------------------------------------------------------------[START DAEMON]"
-  supervisorctl tail daemon
+  supervisorctl tail daemon | tail -n${LINE}
   echo -e "-----------------------------------------------------------------------------------[END DAEMON]"
   echo -e "| CHECKING BLOCKBOOK LOGS..."
   echo -e "------------------------------------------------------------------------------[START BLOCKBOOK]"
-  supervisorctl tail blockbook
+  supervisorctl tail blockbook | tail -n${LINE}
   echo -e "--------------------------------------------------------------------------------[END BLOCKBOOK]"
   if [[ -f /root/$CONFIG_DIR/backend/debug.log ]]; then
     echo -e "| File: /root/$CONFIG_DIR/backend/debug.log"
@@ -315,6 +316,26 @@ if [[ "$1" == "backup_share" ]]; then
   exit
 fi
 
+if [[ "$1" == "archive_clean" ]]; then
+  echo -e "| BLOCKBOOK BACKUP ARCHIVE CLEANER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+  echo -e "------------------------------------------------------------"
+  echo -e "| Checking directory..."
+  if [[ -d /root/backup_archive ]]; then
+    cd /root/backup_archive
+    FILE_LIST=($(ls -p /root/backup_archive))
+    LENGTH=${#FILE_LIST[@]}
+    for (( j=0; j<${LENGTH}; j++ ));
+    do
+      echo -e "| File: /root/backup_archive/${FILE_LIST[j]} was removed!"
+      rm -rf ./${FILE_LIST[j]}
+    done
+  echo -e "| Removed $LENGTH files"
+  else
+     echo -e "| Backup archive directory not exist, operation aborted!"
+  fi
+  echo -e "------------------------------------------------------------"
+  exit
+fi
 
 if [[ "$1" == "backend_clean" ]]; then
   echo -e "| BACKEND CLEANER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
