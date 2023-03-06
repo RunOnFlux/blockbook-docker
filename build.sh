@@ -43,7 +43,7 @@ function blockbook_install() {
 }
 echo -e "| BLOCKBOOK LUNCHER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
 echo -e "-----------------------------------------------------"
-
+echo -e "| Installed GOLANG [v$GOLANG_VERSION]..."
 x=1
 while [ $x -le 4 ]
 do
