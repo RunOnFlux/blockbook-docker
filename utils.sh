@@ -298,9 +298,9 @@ if [[ "$1" == "backup_archive" ]]; then
     echo -e "| File backend-$COIN-backup.tar.gz moved to /root/backup_archive"
     mv /root/backend-$COIN-backup.tar.gz /root/backup_archive/backend-$COIN-backup-${timestamp}.tar.gz
   fi
-  if [[ -f /root/blockboook-$COIN-db-backup.tar.gz ]]; then
-    echo -e "| File blockboook-$COIN-db-backup.tar.gz moved to /root/backup_archive"
-    mv /root/blockboook-$COIN-db-backup.tar.gz /root/backup_archive/blockboook-$COIN-db-backup-${timestamp}.tar.gz
+  if [[ -f /root/blockbook-$COIN-db-backup.tar.gz ]]; then
+    echo -e "| File blockbook-$COIN-db-backup.tar.gz moved to /root/backup_archive"
+    mv /root/blockbook-$COIN-db-backup.tar.gz /root/backup_archive/blockbook-$COIN-db-backup-${timestamp}.tar.gz
   fi
   echo -e "--------------------------------------------------"
   exit
