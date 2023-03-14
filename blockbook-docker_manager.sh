@@ -1,4 +1,5 @@
 #!/bin/bash
+BLOCKBOOK_DOCKERHUB="runonflux/blockbook-docker"
 set +o history
 trap close EXIT
 function close(){
@@ -81,24 +82,102 @@ function get_ip() {
 }
 
 if [[ "$1" == "" ]]; then
-echo -e "-----------------------------------------------------------------------"
-echo -e "| Blockbook Docker Manager v2.0"
-echo -e "-----------------------------------------------------------------------"
-echo -e "| Usage:"
-echo -e "| status <coin_name>               - show blockbook docker status"
-echo -e "| list <url>                       - show coin list"
-echo -e "| update                           - update blockbook docker image"
-echo -e "| exec <coin_name>                 - login to docker image"
-echo -e "| create <coin_name> <-e variable> - create docker blockbook"
-echo -e "| <coin_name> <-e variable>        - generate docker run commandline"
-echo -e "| clean <coin_name>                - removing blockbook"
-echo -e "| softdeploy <coin_name>           - updating image with date"
-echo -e "-----------------------------------------------------------------------"
-exit
+  echo -e "-----------------------------------------------------------------------------"
+  echo -e "| Blockbook Docker Manager v2.0"
+  echo -e "-----------------------------------------------------------------------------"
+  echo -e "| Usage:"
+  echo -e "| status <coin_name>               - show blockbook docker status"
+  echo -e "| list <url>                       - show coin list"
+  echo -e "| update                           - update blockbook docker image"
+  echo -e "| exec <coin_name>                 - login to docker image"
+  echo -e "| create <coin_name> <-e variable> - create docker blockbook"
+  echo -e "| <coin_name> <-e variable>        - generate docker run commandline"
+  echo -e "| clean <coin_name>                - removing blockbook"
+  echo -e "| softdeploy <coin_name>           - updating image with date"
+  echo -e "-----------------------------------------------------------------------------"
+  echo -e "| FluxOS Blockbook Checker v1.0"
+  echo -e "-----------------------------------------------------------------------------"
+  echo -e "| Usage:"
+  echo -e "| fluxos list                       - list running blockbooks on fluxos"
+  echo -e "| fluxos <coin_name>                - show information about coin blockbook"
+  echo -e "-----------------------------------------------------------------------------"
+  exit
+fi
+
+if [[ "$1" == "fluxos" ]]; then
+ echo -e "-------------------------------------------------------------------"
+ echo -e "| FluxOS Blockbook Checker v1.0"
+ echo -e "-------------------------------------------------------------------"
+ if [[ "$2" == "" ]]; then
+  echo -e "| Usage:"
+  echo -e "| fluxos list             - list running blockbooks on fluxos"
+  echo -e "| fluxos <coin_name>      - show information about coin blockbook"
+  echo -e "-------------------------------------------------------------------"
+  exit
+ fi
+ if [[ "$2" == "list" ]]; then
+   echo -e "| Blockbooks running on FluxOS"
+   echo -e "--------------------------------------------------------------"
+   echo -e "$(curl -sSL https://api.runonflux.io/apps/globalappsspecifications | jq . | grep -oP "(?<=blockbook)[a-z]+" | uniq)"
+   echo -e "--------------------------------------------------------------"
+   exit
+ fi
+ echo -e "| COIN: $2"
+ echo -e "--------------------------------------------------------------"
+ DOMAIN_CHECK=$(curl -sSL -m 10 https://blockbook$2.app.runonflux.io/api 2>/dev/null | jq -r .backend.blocks 2>/dev/null)
+ if [[ "$DOMAIN_CHECK" == "" ]]; then
+   D_STATUS="[FAILED]"
+ else
+   D_STATUS="[OK]"
+ fi
+ echo -e "| DOMAIN: blockbook$2.app.runonflux.io"
+ echo -e "| STATUS: $D_STATUS"
+ echo -e "--------------------------------------------------------------"
+ PORT=$(curl -SsL -m 10 https://api.runonflux.io/apps/appspecifications/blockbook$2 2>/dev/null | jq .data.compose[].ports[0] 2>/dev/null)
+ IP_SOURCE=$(curl -SsL -m 10 https://api.runonflux.io/apps/location/blockbook$2 2>/dev/null)
+ IP_LIST=($(jq -r .data[].ip 2>/dev/null <<< $IP_SOURCE))
+ PORT_LIST=($(jq -r .data[].ip <<< $IP_SOURCE | awk -F ':[^0-9]*' '{if ($0=$2) print $0-1; else print 16126}'))
+ LENGTH=${#IP_LIST[@]}
+ 
+ if [[ "$LENGTH" == "0" ]]; then
+   echo -e "| Apps location list is empty, operation aborted..."
+   echo -e "--------------------------------------------------------------"
+   exit
+ fi
+ 
+ for (( j=0; j<${LENGTH}; j++ ));
+ do
+   IP=${IP_LIST[j]}
+   IP_CUT="${IP%:*}"
+   RESPONSE=$(curl -sSL -m 5 http://${IP_CUT}:${PORT}/api 2>/dev/null | jq . 2>/dev/null)
+   CHECK=$(jq -r .backend.blocks 2>/dev/null <<< $RESPONSE)
+   BLOCKBOOK=$(jq -r .blockbook.bestHeight 2>/dev/null <<< $RESPONSE)
+   IsSync=$(jq -r .blockbook.inSync 2>/dev/null <<< $RESPONSE)
+   LAST_UPDATE=$(jq -r .blockbook.lastBlockTime 2>/dev/null <<< $RESPONSE)
+   if [[ "$CHECK" != "" ]]; then
+     if [[ "$CHECK" == "null" ]]; then
+       CHECK="Initializing..."
+     fi
+     if [[ "$BLOCKBOOK" == "null" ]]; then
+       BLOCKBOOK="0"
+     fi
+     first_date=$(date -d "$(LC_TIME=C date)" "+%s")
+     second_date=$(date -d "$LAST_UPDATE" "+%s")
+     s=$(( ($first_date - $second_date)/(1) ))
+     echo -e "| Node: http://$IP_CUT:${PORT_LIST[j]}, Apps: http://${IP_CUT}:${PORT} Status: [OK], Height D/B: [$CHECK/$BLOCKBOOK], IsSync: $IsSync, LastUpdate: $(date -d@$s -u +%H:%M:%S) ago."
+   else
+     echo -e "| Node: http://$IP_CUT:${PORT_LIST[j]}, Apps: http://${IP_CUT}:${PORT} Status: [FAILED]"
+   fi
+ done
+ if [[ "$LENGTH" == "0" ]]; then
+  echo -e "| Blockbook not found..."
+ fi
+ echo -e "--------------------------------------------------------------"
+ exit
 fi
 
 if [[ "$1" == "update" ]]; then
-  docker pull runonflux/blockbook-docker
+  docker pull $BLOCKBOOK_DOCKERHUB
   exit
 fi
 
@@ -166,7 +245,7 @@ get_ip
 if [[ "$1" == "create" ]]; then
   EXTRAFLAGS="$3"
   echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT"
-  CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -p $((OUT_PORT-155)):1337 -v /home/$USER/fluxosblockbook_${2}:/root runonflux/blockbook-docker" | awk '$1=$1')
+  CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -p $((OUT_PORT-155)):1337  -v /home/$USER/fluxosblockbook_${2}:/root $BLOCKBOOK_DOCKERHUB" | awk '$1=$1')
   echo -e "| $CMD"
   bash -c "$CMD"
   echo -e ""
@@ -178,13 +257,14 @@ elif [[ "$1" == "softdeploy" ]]; then
   docker rm fluxosblockbook-${2} > /dev/null 2>&1
   EXTRAFLAGS="$3"
   echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT"
-  CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -p $((OUT_PORT-155)):1337 -v /home/$USER/fluxosblockbook_${2}:/root runonflux/blockbook-docker" | awk '$1=$1')
+  CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -p $((OUT_PORT-155)):1337  -v /home/$USER/fluxosblockbook_${2}:/root $BLOCKBOOK_DOCKERHUB" | awk '$1=$1')
   echo -e "| $CMD"
   bash -c "$CMD"
   echo -e ""
 else
   EXTRAFLAGS="$2"
   echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT (EMULATION ONLY)"
-  echo -e "| docker run -d --name fluxosblockbook-${1} -e COIN=${1} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -p $((OUT_PORT-155)):1337 -v /home/$USER/fluxosblockbook_${1}:/root runonflux/blockbook-docker" | awk '$1=$1'
+  echo -e "| docker run -d --name fluxosblockbook-${1} -e COIN=${1} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -p $((OUT_PORT-155)):1337 -v /home/$USER/fluxosblockbook_${1}:/root $BLOCKBOOK_DOCKERHUB" | awk '$1=$1'
   echo -e "----------------------------------------------------------------------------------------"
 fi
+

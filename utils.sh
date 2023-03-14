@@ -161,6 +161,7 @@ if [[ "$1" == "db_restore" ]]; then
     fi
     rm -rf /root/blockbook_backup
     tar_file_unpack "/root/blockbook-$COIN-db-backup.tar.gz" "/root"
+    rm -rf /root/blockbook-$COIN-db-backup.tar.gz
   fi
 
   if [[ ! -d /root/blockbook_backup/rocksdb.bk ]]; then
@@ -171,6 +172,8 @@ if [[ "$1" == "db_restore" ]]; then
   echo -e "| Restoring the database..."
   cd /
   ./opt/rocksdb/ldb --db=/root/blockbook-db restore --backup_dir=/root/blockbook_backup/rocksdb.bk
+  echo -e "| Removing blockbook_backup directory..."
+  rm -rf /root/blockbook_backup
   echo -e "| Starting blockbook service..."
   supervisorctl start blockbook > /dev/null 2>&1
   echo -e "--------------------------------------------------"
@@ -195,7 +198,7 @@ if [[ "$1" == "update_daemon" ]]; then
   echo -e "--------------------------------------------------"
   DAEMON_URL=$2
   if [[ "$DAEMON_URL" == "" ]]; then
-    echo -e "| Missing binary archive url..."
+    echo -e "| Missing binary url..."
     echo -e "--------------------------------------------------"
     exit
   fi
@@ -279,6 +282,7 @@ if [[ "$1" == "backend_restore" ]]; then
    echo -e "| Restore failed..."
    mkdir -p /root/$CONFIG_DIR/backend
   fi
+  rm -rf /root/backend-$COIN-backup.tar.gz
   echo -e "| Starting daemon service..."
   supervisorctl start daemon > /dev/null 2>&1
   echo -e "--------------------------------------------------"
@@ -289,21 +293,14 @@ if [[ "$1" == "backup_archive" ]]; then
   echo -e "| BLOCKBOOK BACKUP ARCHIVE v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "--------------------------------------------------"
   timestamp=$(date +%s)
-  archive=0
   mkdir -p /root/backup_archive > /dev/null 2>&1
   if [[ -f /root/backend-$COIN-backup.tar.gz ]]; then
     echo -e "| File backend-$COIN-backup.tar.gz moved to /root/backup_archive"
     mv /root/backend-$COIN-backup.tar.gz /root/backup_archive/backend-$COIN-backup-${timestamp}.tar.gz
-    archive=1
   fi
-                
-  if [[ -f /root/blockbook-$COIN-db-backup.tar.gz ]]; then
-    echo -e "| File blockbook-$COIN-db-backup.tar.gz moved to /root/backup_archive"
-    mv /root/blockbook-$COIN-db-backup.tar.gz /root/backup_archive/blockbook-$COIN-db-backup-${timestamp}.tar.gz
-    archive=1
-  fi
-  if [[ "$archive" == "0" ]]; then
-    echo -e "| Backup archives not found, operation aborted!"
+  if [[ -f /root/blockboook-$COIN-db-backup.tar.gz ]]; then
+    echo -e "| File blockboook-$COIN-db-backup.tar.gz moved to /root/backup_archive"
+    mv /root/blockboook-$COIN-db-backup.tar.gz /root/backup_archive/blockboook-$COIN-db-backup-${timestamp}.tar.gz
   fi
   echo -e "--------------------------------------------------"
   exit

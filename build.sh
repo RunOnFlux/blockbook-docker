@@ -17,11 +17,12 @@ function rocksdb_install(){
   echo -e "| Installing RocksDB [$ROCKSDB_VERSION]..."
   echo -e "| PATH: $HOME/rocksdb"
   cd $HOME && git clone -b $ROCKSDB_VERSION --depth 1 https://github.com/facebook/rocksdb.git > /dev/null 2>&1
-  cd $HOME/rocksdb && CFLAGS=-fPIC CXXFLAGS='-fPIC -Wno-error=deprecated-copy -Wno-error=pessimizing-move -Wno-error=class-memaccess' PORTABLE=1 make -j 4 release > /root/rocksdb_install.log 2>&1
+  cd $HOME/rocksdb && CFLAGS=-fPIC CXXFLAGS='-fPIC -Wno-error=deprecated-copy -Wno-error=pessimizing-move -Wno-error=class-memaccess' PORTABLE=1 make -j 4 release > /dev/null 2>&1
   if [[ -f $HOME/rocksdb/librocksdb.a ]]; then
    echo -e "| RocksDB BUILD [OK]..."
   else
    echo -e "| RocksDB BUILD [FAILED]..."
+   rm -rf $HOME/rocksdb
   fi 
 }
 
@@ -41,32 +42,49 @@ function blockbook_install() {
   LDFLAGS="-X github.com/trezor/blockbook/common.version=${VERSION} -X github.com/trezor/blockbook/common.gitcommit=${GITCOMMIT} -X github.com/trezor/blockbook/common.buildtime=${BUILDTIME}"
   go build -tags rocksdb_6_16 -ldflags="-s -w ${LDFLAGS}"
 }
-echo -e "| BLOCKBOOK LUNCHER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
-echo -e "-----------------------------------------------------"
-echo -e "| Installed GOLANG [$GOLANG_VERSION]..."
-echo -e "| PATH: $HOME/go"
-x=1
-while [ $x -le 4 ]
-do
-  rocksdb_install
-  blockbook_install
-  x=$(( $x + 1 ))
-  if [[ -f $HOME/blockbook/blockbook ]]; then
-    echo -e "| Blockbook BUILD [OK]..."
-    break
-  else
-    echo -e "| Blockbook BUILD [FAILED]..."
-    rm -rf $HOME/blockbook
-    rm -rf $HOME/rocksdb
-  fi 
-  echo -e "| Duration: $((($(date +%s)-$start_build)/60)) min. $((($(date +%s)-$start_build) % 60)) sec."
-done
 
-if [[ ! -f $HOME/blockbook/blockbook ]]; then
+function setup() {
+  echo -e "| BLOCKBOOK LUNCHER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "-----------------------------------------------------"
-  exit
-fi
-
+  if [[ -d $HOME/blockbook ]]; then
+    echo -e "| Installed GOLANG [$GOLANG_VERSION]..."
+    echo -e "| PATH: $HOME/go"
+    echo -e "| Installed RocksDB [$ROCKSDB_VERSION]..."
+    echo -e "| PATH: $HOME/rocksdb"
+    echo -e "| Installed Blockbook [v$VERSION]..."
+    echo -e "| PATH: $HOME/blockbook"
+  else
+    echo -e "| Installed GOLANG [$GOLANG_VERSION]..."
+    echo -e "| PATH: $HOME/go"
+    x=1
+    while [ $x -le 4 ]
+    do
+      rocksdb_install
+      if [[ ! -f $HOME/rocksdb/librocksdb.a ]]; then
+        continue
+      fi
+      blockbook_install
+      x=$(( $x + 1 ))
+      if [[ -f $HOME/blockbook/blockbook ]]; then
+        echo -e "| Blockbook BUILD [OK]..."
+        break
+      else
+        echo -e "| Blockbook BUILD [FAILED]..."
+        rm -rf $HOME/blockbook
+        rm -rf $HOME/rocksdb
+      fi 
+      echo -e "| Duration: $((($(date +%s)-$start_build)/60)) min. $((($(date +%s)-$start_build) % 60)) sec."
+    done
+  fi
+  
+  if [[ ! -f $HOME/blockbook/blockbook ]]; then
+    echo -e "-----------------------------------------------------"
+    exit
+  fi
+}
+##### Install Process
+setup
+##########################
 if [[ ! -f /root/blockchaincfg.json ]]; then
   if [[ ! -d /root/$CONFIG_DIR ]]; then
     echo -e "| Creating config directory..."

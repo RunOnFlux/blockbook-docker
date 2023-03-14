@@ -5,9 +5,9 @@
 bash -i <(curl -s https://raw.githubusercontent.com/RunOnFlux/blockbook-docker/master/blockbook-docker_manager.sh)
 ```
 ```
------------------------------------------------------------------------
+-----------------------------------------------------------------------------
 | Blockbook Docker Manager v2.0
------------------------------------------------------------------------
+-----------------------------------------------------------------------------
 | Usage:
 | status <coin_name>               - show blockbook docker status
 | list <url>                       - show coin list
@@ -17,12 +17,19 @@ bash -i <(curl -s https://raw.githubusercontent.com/RunOnFlux/blockbook-docker/m
 | <coin_name> <-e variable>        - generate docker run commandline
 | clean <coin_name>                - removing blockbook
 | softdeploy <coin_name>           - updating image with date
------------------------------------------------------------------------
+-----------------------------------------------------------------------------
+| FluxOS Blockbook Checker v1.0
+-----------------------------------------------------------------------------
+| Usage:
+| fluxos list                       - list running blockbooks on fluxos
+| fluxos <coin_name>                - show information about coin blockbook
+-----------------------------------------------------------------------------
 ```
 ### Deploy container
 ```
 bash -i <(curl -s https://raw.githubusercontent.com/RunOnFlux/blockbook-docker/master/blockbook-docker_manager.sh) create flux
 ```
+
 ### Maintenance (utils.sh)
 ```
   -------------------------------------------------------------------------------
@@ -40,8 +47,8 @@ bash -i <(curl -s https://raw.githubusercontent.com/RunOnFlux/blockbook-docker/m
   | backend_clean                          - remove backend directory content
   | backup_share                           - share backup archive directory via http
   | backup_archive                         - create backup archive directory
-  | archive_clean                          - remove backup archive directory content
   | log_clean                              - remove logs
+  | archive_clean                          - remove backup archive directory content 
   | logs <number>                          - show all logs
   ------------------------------------------------------------------------------
   () - optional
@@ -71,6 +78,7 @@ of this parameter has the format `<VARIABLE_NAME>=<VALUE>`.
 |`CLIFLAGS`| Config flags for daemon | `YES` <br />when using CLI mode | `unset` |
 |`DAEMON_URL`| Download URL for daemon .tar.gz archive | `NO` | `AUTO` <br />`FROM BLOCKBOOK CONFIG` |
 |`DAEMON_CONFIG`| Generate daemon config using blockbook template | `NO` | `AUTO` <br />`FROM BLOCKBOOK` |
+|`FETCH_FILE`| Name of fetch parms script <br /> Example: "fetch-params.sh" | `NO` | `unset` |
 |`LOG_SIZE_LIMIT`| Size limit for log cleaner in MB | `NO` | `40` |
 |`BLOCKBOOK_PORT`| Port for blockbook. To get correct port check: <br /> https://github.com/trezor/blockbook/blob/master/docs/ports.md | `YES` | `unset` |
 |`BOOTSTRAP`| Enable daemon bootstrapping <br /> DISABLED=0, ENABLED=1 | `NO` | `0` |
