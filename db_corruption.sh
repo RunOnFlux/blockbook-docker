@@ -1,4 +1,13 @@
 #!/bin/bash
+CFG_FILE=/root/blockchaincfg.json
+echo -e "| Awaiting for Blockbook build..."
+while true; do
+   if [[ -f $CFG_FILE && -f $HOME/blockbook/blockbook ]]; then
+     sleep 180
+     break
+   fi
+   sleep 20
+done
 
 if [[ -f /root/blockbook.log ]]; then
   echo -e "------------------------- [$(date '+%Y-%m-%d %H:%M:%S')][START]"
