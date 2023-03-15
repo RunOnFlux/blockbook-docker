@@ -59,8 +59,9 @@ COPY blockbook.sh /blockbook.sh
 COPY check-health.sh /check-health.sh
 COPY consensus.sh /consensus.sh
 COPY utils.sh /utils.sh
+COPY db_corruption.sh /db_corruption.sh
 
-RUN chmod 755 /blockbook.sh /daemon.sh /build.sh /check-health.sh /consensus.sh /utils.sh
+RUN chmod 755 /blockbook.sh /daemon.sh /build.sh /check-health.sh /consensus.sh /utils.sh /db_corruption.sh
 RUN mkdir -p /var/log/supervisor
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 VOLUME /root
