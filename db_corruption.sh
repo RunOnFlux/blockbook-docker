@@ -3,7 +3,7 @@ CFG_FILE=/root/blockchaincfg.json
 echo -e "| Awaiting for Blockbook build..."
 while true; do
    if [[ -f $CFG_FILE && -f $HOME/blockbook/blockbook ]]; then
-     sleep 180
+     sleep 300
      break
    fi
    sleep 20
