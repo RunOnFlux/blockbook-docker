@@ -252,9 +252,11 @@ if [[ "$1" == "create" ]]; then
 elif [[ "$1" == "softdeploy" ]]; then
   echo -e "| Stopping continer..."
   echo -e "| Removing image..."
-  echo -e "----------------------------------------------------------------------------------------"
   docker stop fluxosblockbook-${2} > /dev/null 2>&1
   docker rm fluxosblockbook-${2} > /dev/null 2>&1
+  echo -e "| Updating image..."
+  docker pull $BLOCKBOOK_DOCKERHUB
+  echo -e "----------------------------------------------------------------------------------------"
   EXTRAFLAGS="$3"
   echo -e "| BlockBookURL: http://$WANIP:$OUT_PORT"
   CMD=$(echo "docker run -d --name fluxosblockbook-${2} -e COIN=${2} $BINARY_NAME -e BLOCKBOOK_PORT=${BLOCKBOOKPORT} $flage $POSTINST $EXTRAFLAGS -p ${OUT_PORT}:${BLOCKBOOKPORT} -p $((OUT_PORT-155)):1337  -v /home/$USER/fluxosblockbook_${2}:/root $BLOCKBOOK_DOCKERHUB" | awk '$1=$1')
