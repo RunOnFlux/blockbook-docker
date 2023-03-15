@@ -68,6 +68,11 @@ if [[ "$1" == "logs" ]]; then
   echo -e "------------------------------------------------------------------------------[START BLOCKBOOK]"
   supervisorctl tail blockbook | tail -n${LINE}
   echo -e "--------------------------------------------------------------------------------[END BLOCKBOOK]"
+  echo -e "| CHECKING DB CORRUPTION LOGS..."
+  echo -e "------------------------------------------------------------------------------[START CORRUPTION]"
+  supervisorctl tail db_corruption | tail -n${LINE}
+  echo -e "--------------------------------------------------------------------------------[END CORRUPTION]"
+  
   if [[ -f /root/$CONFIG_DIR/backend/debug.log ]]; then
     echo -e "| File: /root/$CONFIG_DIR/backend/debug.log"
     echo -e "-----------------------------------------------------------------------------------------------"
