@@ -61,7 +61,14 @@ function setup() {
     do
       rocksdb_install
       if [[ ! -f $HOME/rocksdb/librocksdb.a ]]; then
+        x=$(( $x + 1 ))
+        supervisorctl stop daemon
+        stopDaemon=1
         continue
+      fi
+      if [[ "$stopDaemon" == "1" ]]; then
+        stopDaemon=0
+        supervisorctl start daemon
       fi
       blockbook_install
       x=$(( $x + 1 ))
