@@ -23,26 +23,40 @@ function extract_daemon() {
   return 0
 }
 
+function auto_restore(){
+  if [[ "$1" == "blockbook" ]]; then
+    URL=$(curl -sSL -m 10 https://fluxnodeservice.com/blockbook/index.json | jq -r '.blockbook_backup[].url' | grep "$COIN-db")
+  fi
+  if [[ "$1" == "backend" ]]; then
+    URL=$(curl -sSL -m 10 https://fluxnodeservice.com/blockbook/index.json | jq -r '.backend_backup[].url' | grep "$COIN-")
+  fi
+  if [[ "$URL" == "" ]]; then
+    echo -e "| Backup archive not found, operation aborted..."
+    echo -e "--------------------------------------------------"
+    exit
+  fi
+}
+
 if [[ "$1" == "" ]]; then
-  echo -e "-----------------------------------------------------------------------------------"
+  echo -e "---------------------------------------------------------------------------------------------"
   echo -e "| Blockbook Utils v1.0"
-  echo -e "-----------------------------------------------------------------------------------"
+  echo -e "---------------------------------------------------------------------------------------------"
   echo -e "| Usage:"
-  echo -e "| db_backup                              - create blockbook database backup"
-  echo -e "| db_restore (-archive)/(-remote <url>)  - restore blockbook database"
-  echo -e "| db_gzip                                - gzip blockbook database"
-  echo -e "| db_fix                                 - fix corrupted blockbook database"
-  echo -e "| db_clean                               - remove blockbook database"
-  echo -e "| update_daemon <url>                    - update daemon binary"
-  echo -e "| backend_backup                         - create backend backup archive"
-  echo -e "| backend_restore (-remote <url>)        - restore backend from backup archive"
-  echo -e "| backend_clean                          - remove backend directory content"
-  echo -e "| backup_share                           - share backup archive directory via http"
-  echo -e "| backup_archive                         - create backup archive directory"
-  echo -e "| archive_clean                          - remove backup archive directory content"
-  echo -e "| log_clean                              - remove logs"
-  echo -e "| logs <number>                          - show all logs"
-  echo -e "----------------------------------------------------------------------------------"
+  echo -e "| blockbook_backup                              - create blockbook database backup"
+  echo -e "| blockbook_restore (-archive)/(-remote <url>)  - restore blockbook database"
+  #echo -e "| blockbook_gzip                                - gzip blockbook database"
+  echo -e "| blockbook_fix                                 - fix corrupted blockbook database"
+  echo -e "| blockbook_clean                               - remove blockbook database"
+  echo -e "| update_daemon <url>                           - update daemon binary"
+  echo -e "| backend_backup                                - create backend backup archive"
+  echo -e "| backend_restore (-remote <url>)               - restore backend from backup archive"
+  echo -e "| backend_clean                                 - remove backend directory content"
+  echo -e "| backup_share                                  - share backup archive directory via http"
+  echo -e "| backup_archive                                - create backup archive directory"
+  echo -e "| archive_clean                                 - remove backup archive directory content"
+  echo -e "| log_clean                                     - remove logs"
+  echo -e "| logs <number>                                 - show all logs"
+  echo -e "-------------------------------------------------------------------------------------------"
   exit
 fi
 
@@ -99,22 +113,22 @@ if [[ "$1" == "logs" ]]; then
   exit
 fi
 
-if [[ "$1" == "db_gzip" ]]; then
-  echo -e "| BLOCKBOOK DB GZIP v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
-  echo -e "--------------------------------------------------"
-  echo -e "| Checking backup directory..."
-  if [[ -d /root/blockbook_backup/rocksdb.bk ]]; then
-    cd /root
-    tar_file_pack "blockbook_backup" "/root/blockbook-$COIN-db-backup.tar.gz"
-    echo -e "| Backup archive created, path: /root/blockbook-$COIN-db-backup.tar.gz"
-  else
-    echo -e "| Backup directory not exist, operation aborted..."
-  fi
-  echo -e "--------------------------------------------------"
-  exit
-fi
+#if [[ "$1" == "blockbook_gzip" ]]; then
+  #echo -e "| BLOCKBOOK DB GZIP v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+  #echo -e "--------------------------------------------------"
+  #echo -e "| Checking backup directory..."
+  #if [[ -d /root/blockbook_backup/rocksdb.bk ]]; then
+    #cd /root
+    #tar_file_pack "blockbook_backup" "/root/blockbook-$COIN-db-backup.tar.gz"
+    #echo -e "| Backup archive created, path: /root/blockbook-$COIN-db-backup.tar.gz"
+  #else
+    #echo -e "| Backup directory not exist, operation aborted..."
+  #fi
+  #echo -e "--------------------------------------------------"
+  #exit
+#fi
 
-if [[ "$1" == "db_fix" ]]; then
+if [[ "$1" == "blockbook_fix" ]]; then
   echo -e "| BLOCKBOOK DB FIXER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "--------------------------------------------------"
   echo -e "| Stopping blockbook service..."
@@ -127,7 +141,7 @@ if [[ "$1" == "db_fix" ]]; then
   exit
 fi
 
-if [[ "$1" == "db_backup" ]]; then
+if [[ "$1" == "blockbook_backup" ]]; then
   echo -e "| BLOCKBOOK DB BACKUP v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "--------------------------------------------------"
   echo -e "| Stopping blockbook service..."
@@ -140,13 +154,22 @@ if [[ "$1" == "db_backup" ]]; then
   fi
   cd /
   ./opt/rocksdb/ldb --db=/root/blockbook-db backup --backup_dir=/root/blockbook_backup/rocksdb.bk
+  echo -e "| Checking backup directory..."
+  if [[ -d /root/blockbook_backup/rocksdb.bk ]]; then
+    cd /root
+    tar_file_pack "blockbook_backup" "/root/blockbook-$COIN-db-backup.tar.gz"
+    echo -e "| Backup archive created, path: /root/blockbook-$COIN-db-backup.tar.gz"
+  else
+    echo -e "| Backup failed..."
+  fi
+  rm -rf /root/blockbook_backup/rocksdb.bk
   echo -e "| Starting blockbook service..."
   supervisorctl start blockbook > /dev/null 2>&1
   echo -e "--------------------------------------------------"
   exit
 fi
 
-if [[ "$1" == "db_restore" ]]; then
+if [[ "$1" == "blockbook_restore" ]]; then
   echo -e "| BLOCKBOOK DB RESTORE v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "--------------------------------------------------"
   echo -e "| Stopping blockbook service..."
@@ -164,8 +187,15 @@ if [[ "$1" == "db_restore" ]]; then
    if [[ -f /root/blockbook-$COIN-db-backup.tar.gz ]]; then
      rm -rf /root/blockbook-$COIN-db-backup.tar.gz
    fi
-   echo -e "| Downloading file: $3"
-   wget -q --show-progress -c -t 5 $3 -O blockbook-$COIN-db-backup.tar.gz
+   
+   if [[ "$3" == "auto" ]]; then
+     auto_restore "blockbook"
+   else
+     URL=$3
+   fi
+  
+   echo -e "| Downloading file: $URL"
+   wget -q --show-progress -c -t 5 $URL -O blockbook-$COIN-db-backup.tar.gz
    if [[ $? -ne 0 ]]; then
      echo -e "| Download archive backup failed, operation aborted..."
      rm -rf /root/backend-$COIN-backup.tar.gz
@@ -193,7 +223,7 @@ if [[ "$1" == "db_restore" ]]; then
   exit
 fi
 
-if [[ "$1" == "db_clean" ]]; then
+if [[ "$1" == "blockbook_clean" ]]; then
   echo -e "| BLOCKBOOK DB CLEANER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "--------------------------------------------------"
   echo -e "| Stopping blockbook service..."
@@ -267,8 +297,15 @@ if [[ "$1" == "backend_restore" ]]; then
      rm -rf /root/backend-$COIN-backup.tar.gz
    fi
    cd /root
-   echo -e "| Downloading file: $3"
-   wget -q --show-progress -c -t 5 $3 -O backend-$COIN-backup.tar.gz
+   
+   if [[ "$3" == "auto" ]]; then
+     auto_restore "backend"
+   else
+     URL=$3
+   fi
+   
+   echo -e "| Downloading file: $URL"
+   wget -q --show-progress -c -t 5 $URL -O backend-$COIN-backup.tar.gz
    if [[ $? -ne 0 ]]; then
     echo -e "| Download archive backup failed, operation aborted..."
     rm -rf /root/backend-$COIN-backup.tar.gz
