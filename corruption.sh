@@ -30,7 +30,7 @@ if [[ -f /root/blockbook.log ]]; then
   echo -e "----------------------------------------------------------------[END]"
 fi
 
-if [[ -f /root/$CONFIG_DIR/backend/$COIN.log ]]; then
+if [[ -f /root/$CONFIG_DIR/backend/debug.log ]]; then
   echo -e "------------------------------------------ [$(date '+%Y-%m-%d %H:%M:%S')][START]"
   echo -e "| Checking backend logs...."
   corruption=$(grep -ao "Corrupted block database detected" /root/$CONFIG_DIR/backend/$COIN.log)
