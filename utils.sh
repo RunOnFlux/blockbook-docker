@@ -414,6 +414,9 @@ if [[ "$1" == "log_clean" ]]; then
   for (( j=0; j<${LENGTH}; j++ ));
   do
    LOG_PATH="${LOG_LIST[$j]}"
+   if [[  $(egrep "blocks" <<< $LOG_PATH) != "" ]]; then
+     continue
+   fi
    SIZE=$(ls -l --b=M  $LOG_PATH | cut -d " " -f5)
    #echo -e "| File: ${LOG_PATH} SIZE: ${SIZE}"
    if [[ $(egrep -o '[0-9]+' <<< $SIZE) -gt $LOG_SIZE_LIMIT ]]; then
