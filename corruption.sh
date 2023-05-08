@@ -33,7 +33,7 @@ fi
 if [[ -f /root/$CONFIG_DIR/backend/debug.log ]]; then
   echo -e "------------------------------------------ [$(date '+%Y-%m-%d %H:%M:%S')][START]"
   echo -e "| Checking backend logs...."
-  corruption=$(grep -ao "Corrupted block database detected" /root/$CONFIG_DIR/backend/debug.log)
+  corruption=$(egrep -ao "Corrupted|Corruption" /root/$CONFIG_DIR/backend/debug.log)
   if [[ "$corruption" != "" ]]; then
     echo -e "| Backend Corruption detected!..."
     echo -e "| Stopping backend service..."
