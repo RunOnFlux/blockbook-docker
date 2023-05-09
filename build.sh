@@ -128,6 +128,6 @@ if [[ "$crontab_check" == "0" ]]; then
   echo -e "| ADDED CRONE JOB FOR DB CORRUPTION..."
   (crontab -l -u root 2>/dev/null; echo "0 */2 * * *  /bin/bash /corruption.sh > /tmp/corruption_output.log 2>&1") | crontab -
 else
-  echo -e "| CRONE JOB FOR LOG DB CORRUPTION ALREADY EXIST..."
+  echo -e "| CRONE JOB FOR DB CORRUPTION ALREADY EXIST..."
 fi
 echo -e "-----------------------------------------------------"
