@@ -119,9 +119,15 @@ echo -e "| CRON JOB CHECKING..."
 [ -f /var/spool/cron/crontabs/root ] && crontab_check=$(cat /var/spool/cron/crontabs/root| grep -o utils | wc -l) || crontab_check=0
 if [[ "$crontab_check" == "0" ]]; then
   echo -e "| ADDED CRONE JOB FOR LOG CLEANER..."
-  echo -e "-----------------------------------------------------"
   (crontab -l -u root 2>/dev/null; echo "0 0 1-30/5 * *  /bin/bash /utils.sh log_clean > /tmp/clean_output.log 2>&1") | crontab -
 else
-  echo -e "| CRONE JOB ALREADY EXIST..."
-  echo -e "-----------------------------------------------------"
+  echo -e "| CRONE JOB FOR LOG CLEANER ALREADY EXIST..."
 fi
+[ -f /var/spool/cron/crontabs/root ] && crontab_check=$(cat /var/spool/cron/crontabs/root| grep -o corruption | wc -l) || crontab_check=0
+if [[ "$crontab_check" == "0" ]]; then
+  echo -e "| ADDED CRONE JOB FOR DB CORRUPTION..."
+  (crontab -l -u root 2>/dev/null; echo "0 */2 * * *  /bin/bash /corruption.sh > /tmp/corruption_output.log 2>&1") | crontab -
+else
+  echo -e "| CRONE JOB FOR LOG DB CORRUPTION ALREADY EXIST..."
+fi
+echo -e "-----------------------------------------------------"
