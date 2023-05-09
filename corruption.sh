@@ -4,7 +4,7 @@ CFG_FILE=/root/blockchaincfg.json
 echo -e "| Awaiting for Blockbook build..."
 echo -e "| CONFIG_DIR: $CONFIG_DIR"
 while true; do
-   if [[ -f $CFG_FILE && -f /root/blockbook/blockbook ]]; then
+   if [[ -f $CFG_FILE && -f /opt/blockbook/blockbook ]]; then
      sleep 300
      break
    fi
