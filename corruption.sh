@@ -31,7 +31,7 @@ if [[ -f /root/blockbook.log ]]; then
 else
   echo -e "| File does not exists, operation aborted...."
 fi
-
+echo -e "----------------------------------------------------------------"
 echo -e "| Checking backend logs...."
 if [[ -f /root/$CONFIG_DIR/backend/debug.log ]]; then
   corruption=$(egrep -ao "Corrupted|Corruption|ERROR: VerifyDB|printcrashinfo" /root/$CONFIG_DIR/backend/debug.log)
