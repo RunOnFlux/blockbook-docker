@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 CONFIG_DIR=${CONFIG_DIR:-$COIN}
 CFG_FILE=/root/blockchaincfg.json
-echo -e "| Awaiting for Blockbook build..."
-echo -e "| CONFIG_DIR: $CONFIG_DIR"
+#echo -e "| Awaiting for Blockbook build..."
+#echo -e "| CONFIG_DIR: $CONFIG_DIR"
 while true; do
-   if [[ -f $CFG_FILE && -f /opt/blockbook/blockbook ]]; then
-     sleep 300
+   if [[ -f $CFG_FILE && -f $HOME/blockbook/blockbook ]]; then
+     sleep 240
      break
    fi
-   sleep 20
+   sleep 30
 done
 
+echo -e "------------------------------------------ [$(date '+%Y-%m-%d %H:%M:%S')][START]"
+echo -e "| Checking blockbook logs...."
 if [[ -f /root/blockbook.log ]]; then
-  echo -e "------------------------------------------ [$(date '+%Y-%m-%d %H:%M:%S')][START]"
-  echo -e "| Checking blockbook logs...."
   WALs_CHECK=$(grep -ao "rocksDB: Corruption" /root/blockbook.log)
   if [[ "$WALs_CHECK" != "" ]]; then
     echo -e "| RocksDB Corruption detected!..."
@@ -28,12 +28,12 @@ if [[ -f /root/blockbook.log ]]; then
   else
     echo -e "| Corruption NOT detected, all looks fine ;)"
   fi
-  echo -e "----------------------------------------------------------------[END]"
+else
+  echo -e "| File does not exists, operation aborted...."
 fi
 
+echo -e "| Checking backend logs...."
 if [[ -f /root/$CONFIG_DIR/backend/debug.log ]]; then
-  echo -e "------------------------------------------ [$(date '+%Y-%m-%d %H:%M:%S')][START]"
-  echo -e "| Checking backend logs...."
   corruption=$(egrep -ao "Corrupted|Corruption|ERROR: VerifyDB|printcrashinfo" /root/$CONFIG_DIR/backend/debug.log)
   if [[ "$corruption" != "" ]]; then
     echo -e "| Backend Corruption detected!..."
@@ -46,5 +46,7 @@ if [[ -f /root/$CONFIG_DIR/backend/debug.log ]]; then
   else
     echo -e "| Corruption NOT detected, all looks fine ;)"
   fi
-  echo -e "----------------------------------------------------------------[END]"
+else
+  echo -e "| File does not exists, operation aborted...."
 fi
+echo -e "----------------------------------------------------------------[END]"
