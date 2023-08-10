@@ -34,7 +34,7 @@ fi
 echo -e "----------------------------------------------------------------"
 echo -e "| Checking backend logs...."
 if [[ -f /root/$CONFIG_DIR/backend/debug.log ]]; then
-  corruption=$(egrep -ao "Corrupted|Corruption|ERROR: VerifyDB|printcrashinfo" /root/$CONFIG_DIR/backend/debug.log)
+  corruption=$(egrep -ao "Corrupted|Corruption|ERROR: VerifyDB|printcrashinfo|ERROR: invalid header received|InvalidChainFound: invalid" /root/$CONFIG_DIR/backend/debug.log)
   if [[ "$corruption" != "" ]]; then
     echo -e "| Backend Corruption detected!..."
     echo -e "| Stopping backend service..."
