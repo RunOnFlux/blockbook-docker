@@ -229,7 +229,7 @@ if [[ "$1" == "blockbook_clean" ]]; then
   echo -e "| Stopping blockbook service..."
   supervisorctl stop blockbook > /dev/null 2>&1
   echo -e "| Removing blockbook-db..."
-  rm -rf /blockbook-db/*
+  rm -rf /root/blockbook-db/*
   echo -e "| Starting blockbook service..."
   supervisorctl start blockbook > /dev/null 2>&1
   echo -e "--------------------------------------------------"
