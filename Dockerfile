@@ -1,4 +1,4 @@
-FROM debian:11
+FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update && \
@@ -6,7 +6,7 @@ RUN apt-get update && \
   apt-get install -y git wget autoconf automake jq bc supervisor procps curl \
   graphviz libsnappy-dev libzstd-dev zlib1g-dev libbz2-dev liblz4-dev libunwind-dev \
   bsdmainutils build-essential g++-multilib libc6-dev pv libarchive-tools cron unzip libtool \
-  m4 ncurses-dev pkg-config python3 python3-zmq zlib1g-dev libzmq3-dev
+  m4 ncurses-dev pkg-config python3 python3-zmq zlib1g-dev libzmq3-dev libboost-all-dev libdb++-dev
 
 ENV BLOCKBOOKGIT_URL=${BLOCKBOOKGIT_URL:-https://github.com/trezor/blockbook.git}
 ENV TAG=${TAG:-master}
