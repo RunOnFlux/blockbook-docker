@@ -44,5 +44,5 @@ echo -e "| Starting Blockbook ($COIN)..."
 if [[ ! -d /root/blockbook-db ]]; then
   mkdir -p /root/blockbook-db
 fi
-exec ./blockbook -sync -blockchaincfg=$CFG_FILE -datadir=/root/blockbook-db -debug -workers=${WORKERS:-1} -dbcache=${DBCACHE:-500} -public=:${BLOCKBOOK_PORT} -logtostderr
+exec ./blockbook -sync -blockchaincfg=$CFG_FILE -datadir=/root/blockbook-db -debug -workers=${WORKERS:-1} -dbcache=${DBCACHE:-500} -public=:${BLOCKBOOK_PORT} -logtostderr -resyncindexperiod=30011
 echo -e "---------------------------------------------------------------------------"
