@@ -8,6 +8,7 @@ RUN apt-get update && \
   bsdmainutils build-essential g++-multilib libc6-dev pv libarchive-tools cron unzip libtool \
   m4 ncurses-dev pkg-config python3 python3-zmq zlib1g-dev libzmq3-dev
 
+ENV BLOCKBOOK_DOCKER_VERSION="2.15.0"
 ENV BLOCKBOOKGIT_URL=${BLOCKBOOKGIT_URL:-https://github.com/trezor/blockbook.git}
 ENV TAG=${TAG:-master}
 ENV RPC_USER=${RPC_USER:-user}
