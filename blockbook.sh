@@ -69,7 +69,7 @@ if [[ "$additional_params_from_docker" != "" &&  "$additional_params_from_docker
       docker_clean=$(echo "$docker_clean" | sed "s/\($arg[= ][^ ]*\)//g")
   done
   docker_clean=$(echo "$docker_clean" | tr -s ' ')
-  getArgs($docker_clean)
+  getArgs "$docker_clean"
 fi
 
 if [[ "$argsArray" != "" ]]; then
@@ -82,7 +82,7 @@ fi
 
  clean_variable="${docker_clean} ${final_clean}"
  if [[ "$clean_variable" != "" ]]; then
-    getArgs($clean_variable)
+    getArgs "$clean_variable"
     for arg in "${argsArray[@]}"; do
       exec_string=$(echo "$exec_string" | sed "s/\($arg[= ][^ ]*\)//g")
     done
