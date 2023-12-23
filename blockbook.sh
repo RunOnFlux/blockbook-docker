@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
-
-function getArgs(){
-argsArray=($(echo "$1" | grep -oP -- '-\w+' | sort -u))
-}
-
 RPC_HOST="${RPC_HOST:-localhost}"
 RPC_URL_PROTOCOL="${RPC_URL_PROTOCOL:-http}"
 CFG_FILE=/root/blockchaincfg.json
+
+function getArgs(){
+  argsArray=($(echo "$1" | grep -oP -- '-\w+' | sort -u))
+}
+
+function trim() {
+  local var="$*"
+  # remove leading whitespace characters
+  var="${var#"${var%%[![:space:]]*}"}"
+  # remove trailing whitespace characters
+  var="${var%"${var##*[![:space:]]}"}"
+  printf '%s' "$var"
+}
+
 echo -e "| BLOCKBOOK LUNCHER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
 echo -e "---------------------------------------------------------------------------"
 if [[ "$DAEMON_CONFIG" != "AUTO" ]]; then
@@ -50,44 +59,46 @@ if [[ ! -d /root/blockbook-db ]]; then
   mkdir -p /root/blockbook-db
 fi
 
-exec_string="./blockbook -sync -blockchaincfg=$CFG_FILE -datadir=/root/blockbook-db -debug -workers=${WORKERS:-1} -dbcache=${DBCACHE:-500} -public=:${BLOCKBOOK_PORT} -logtostderr"
+exec_string="$HOME/blockbook/blockbook -sync -blockchaincfg=$CFG_FILE -datadir=/root/blockbook-db -debug -workers=${WORKERS:-1} -dbcache=${DBCACHE:-500} -public=:${BLOCKBOOK_PORT} -logtostderr"
 args_to_remove=( -datadir -debug -log -blockchaincfg -sync -logtostderr -public )
-additional_params_from_blockbook=$(jq -r $HOME/blockbook/configs/coins/${COIN}.json '.blockbook.additional_params')
-additional_params_from_docker=$BLOCKBOOK_PARAMS
+additional_params_from_blockbook=$(jq -r .blockbook.additional_params $HOME/blockbook/configs/coins/${COIN}.json)
+additional_params_from_docker="${BLOCKBOOK_PARAMS}"
 
 if [[ "$additional_params_from_blockbook" != "" &&  "$additional_params_from_blockbook" != "null" ]]; then
   blockbook_clean="${additional_params_from_blockbook}"
   for arg in "${args_to_remove[@]}"; do
-      blockbook_clean=$(echo "$blockbook_clean" | sed "s/\($arg[= ][^ ]*\)//g")
+      blockbook_clean=$(echo "${blockbook_clean}" | sed "s/\($arg[= ][^ ]*\)//g")
   done
-  blockbook_clean=$(echo "$blockbook_clean" | tr -s ' ')
+  blockbook_clean=$(trim "${blockbook_clean}")
 fi
 
-if [[ "$additional_params_from_docker" != "" &&  "$additional_params_from_docker" != "null" ]]; then
+if [[ "$additional_params_from_docker" != "" && "$additional_params_from_docker" != "null" ]]; then
   docker_clean="${additional_params_from_docker}"
   for arg in "${args_to_remove[@]}"; do
-      docker_clean=$(echo "$docker_clean" | sed "s/\($arg[= ][^ ]*\)//g")
+      docker_clean=$(echo "${docker_clean}" | sed "s/\($arg[= ][^ ]*\)//g")
   done
-  docker_clean=$(echo "$docker_clean" | tr -s ' ')
-  getArgs "$docker_clean"
+  docker_clean=$(trim "${docker_clean}")
+  getArgs "${docker_clean}"
 fi
 
 if [[ "$argsArray" != "" ]]; then
   final_clean="${blockbook_clean}"
   for arg in "${argsArray[@]}"; do
-      final_clean=$(echo "$final_clean" | sed "s/\($arg[= ][^ ]*\)//g")
+      final_clean=$(echo "${final_clean}" | sed "s/\($arg[= ][^ ]*\)//g")
   done
-  final_clean=$(echo "$final_clean" | tr -s ' ')
+  final_clean=$(trim "${final_clean}")
+else
+  final_clean="${blockbook_clean}"
 fi
 
- clean_variable="${docker_clean} ${final_clean}"
- if [[ "$clean_variable" != "" ]]; then
-    getArgs "$clean_variable"
-    for arg in "${argsArray[@]}"; do
-      exec_string=$(echo "$exec_string" | sed "s/\($arg[= ][^ ]*\)//g")
-    done
-    exec_string=$(echo "$exec_string" | tr -s ' ')
- fi
- 
-exec "${exec_string} ${clean_variable}"
+clean_variable=$(trim "${docker_clean} ${final_clean}")
+if [[ "$clean_variable" != "" ]]; then
+   getArgs "${clean_variable}"
+   for arg in "${argsArray[@]}"; do
+     exec_string=$(echo "${exec_string}" | sed "s/\($arg[= ][^ ]*\)//g")
+   done
+   exec_string=$(trim "${exec_string}")
+fi
+
+exec ${exec_string} ${clean_variable}
 echo -e "---------------------------------------------------------------------------"
