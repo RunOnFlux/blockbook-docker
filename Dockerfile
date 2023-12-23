@@ -6,9 +6,8 @@ RUN apt-get update && \
   apt-get install -y git wget autoconf automake jq bc supervisor procps curl \
   graphviz libsnappy-dev libzstd-dev zlib1g-dev libbz2-dev liblz4-dev libunwind-dev \
   bsdmainutils build-essential g++-multilib libc6-dev pv libarchive-tools cron unzip libtool \
-  m4 ncurses-dev pkg-config python3 python3-zmq zlib1g-dev libzmq3-dev
+  m4 ncurses-dev pkg-config python3 python3-zmq zlib1g-dev libzmq3-dev libgflags-dev
 
-ENV BLOCKBOOK_DOCKER_VERSION="2.15.0"
 ENV BLOCKBOOKGIT_URL=${BLOCKBOOKGIT_URL:-https://github.com/trezor/blockbook.git}
 ENV TAG=${TAG:-master}
 ENV RPC_USER=${RPC_USER:-user}
@@ -17,7 +16,7 @@ ENV HOME=/opt
 ENV BOOTSTRAP=${BOOTSTRAP:-0}
 ENV DAEMON=${DAEMON:-1}
 ENV CONFIG=${CONFIG:-AUTO}
-ENV GOLANG_VERSION="go1.20.1"
+ENV GOLANG_VERSION="go1.21.4"
 ENV ROCKSDB_VERSION=${ROCKSDB_VERSION:-v7.10.2}
 ENV DAEMON_CONFIG=${DAEMON_CONFIG:-AUTO}
 ENV GOPATH=$HOME/go
