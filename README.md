@@ -33,7 +33,7 @@ bash -i <(curl -s https://raw.githubusercontent.com/RunOnFlux/blockbook-docker/m
 ### Maintenance (utils.sh)
 ```
   -------------------------------------------------------------------------------------
-  | Blockbook Utils v1.0
+  | Blockbook Utils v2.0
   -------------------------------------------------------------------------------------
   | Usage:
   | blockbook_backup                              - create blockbook database backup
