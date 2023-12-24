@@ -80,6 +80,7 @@ of this parameter has the format `<VARIABLE_NAME>=<VALUE>`.
 |`FETCH_FILE`| Name of fetch parms script <br /> Example: "fetch-params.sh" | `NO` | `unset` |
 |`LOG_SIZE_LIMIT`| Size limit for log cleaner in MB | `NO` | `40` |
 |`BLOCKBOOK_PORT`| Port for blockbook. To get correct port check: <br /> https://github.com/trezor/blockbook/blob/master/docs/ports.md | `YES` | `unset` |
+|`BLOCKBOOK_PARAMS`| BlockBook additional params. This variable can overwrite .blockbook.additional_params | `NO` | `unset` |
 |`BOOTSTRAP`| Enable daemon bootstrapping <br /> DISABLED=0, ENABLED=1 | `NO` | `0` |
 |`B_FILE`| Bootstrap archive file name | `NO` | `daemon_bootstrap.tar.gz` |
 |`B_TIMEOUT`| Bootstrap speed test timeout in sec | `NO` | `6` |
