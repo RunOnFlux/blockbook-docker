@@ -39,7 +39,7 @@ function auto_restore(){
 
 if [[ "$1" == "" ]]; then
   echo -e "---------------------------------------------------------------------------------------------"
-  echo -e "| Blockbook Utils v1.0"
+  echo -e "| Blockbook Utils v2.0"
   echo -e "---------------------------------------------------------------------------------------------"
   echo -e "| Usage:"
   echo -e "| blockbook_backup                              - create blockbook database backup"
@@ -74,7 +74,7 @@ if [[ "$1" == "logs" ]]; then
   echo -e "----------------------------------------------------------------------------------[START BUILD]"
   supervisorctl tail build | tail -n${LINE}
   echo -e "------------------------------------------------------------------------------------[END BUILD]"
-  echo -e "| CHECKING DAEMON LOGS..."
+  echo -e "| CHECKING BACKEND LOGS..."
   echo -e "---------------------------------------------------------------------------------[START DAEMON]"
   supervisorctl tail daemon | tail -n${LINE}
   echo -e "-----------------------------------------------------------------------------------[END DAEMON]"
@@ -82,7 +82,7 @@ if [[ "$1" == "logs" ]]; then
   echo -e "------------------------------------------------------------------------------[START BLOCKBOOK]"
   supervisorctl tail blockbook | tail -n${LINE}
   echo -e "--------------------------------------------------------------------------------[END BLOCKBOOK]"
-  echo -e "| CHECKING DB CORRUPTION LOGS..."
+  echo -e "| CHECKING CORRUPTION LOGS..."
   echo -e "------------------------------------------------------------------------------[START CORRUPTION]"
   supervisorctl tail db_corruption | tail -n${LINE}
   echo -e "--------------------------------------------------------------------------------[END CORRUPTION]"
@@ -142,7 +142,7 @@ if [[ "$1" == "blockbook_fix" ]]; then
 fi
 
 if [[ "$1" == "blockbook_backup" ]]; then
-  echo -e "| BLOCKBOOK DB BACKUP v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+  echo -e "| BLOCKBOOK BACKUP v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "--------------------------------------------------"
   echo -e "| Stopping blockbook service..."
   supervisorctl stop blockbook > /dev/null 2>&1
@@ -170,7 +170,7 @@ if [[ "$1" == "blockbook_backup" ]]; then
 fi
 
 if [[ "$1" == "blockbook_restore" ]]; then
-  echo -e "| BLOCKBOOK DB RESTORE v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+  echo -e "| BLOCKBOOK RESTORE v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "--------------------------------------------------"
   echo -e "| Stopping blockbook service..."
   supervisorctl stop blockbook > /dev/null 2>&1
@@ -224,7 +224,7 @@ if [[ "$1" == "blockbook_restore" ]]; then
 fi
 
 if [[ "$1" == "blockbook_clean" ]]; then
-  echo -e "| BLOCKBOOK DB CLEANER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+  echo -e "| BLOCKBOOK CLEANER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "--------------------------------------------------"
   echo -e "| Stopping blockbook service..."
   supervisorctl stop blockbook > /dev/null 2>&1
