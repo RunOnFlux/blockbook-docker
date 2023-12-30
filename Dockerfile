@@ -21,8 +21,10 @@ ENV ROCKSDB_VERSION=${ROCKSDB_VERSION:-v7.10.2}
 ENV DAEMON_CONFIG=${DAEMON_CONFIG:-AUTO}
 ENV GOPATH=$HOME/go
 ENV PATH=$PATH:$GOPATH/bin
-ENV CGO_CFLAGS="-I$HOME/rocksdb/include"
+ENV CGO_CFLAGS="-I$HOME/rocksdb/include -O -D__BLST_PORTABLE__"
 ENV CGO_LDFLAGS="-L$HOME/rocksdb -lrocksdb -lstdc++ -lm -lz -ldl -lbz2 -lsnappy -llz4 -lzstd"
+ENV CGO_CFLAGS_ALLOW="-O -D__BLST_PORTABLE__"
+
 # Install GOLANG
 RUN echo "Installing GOLANG [$GOLANG_VERSION]..." && \
   cd /opt && wget https://dl.google.com/go/$GOLANG_VERSION.linux-amd64.tar.gz && \
