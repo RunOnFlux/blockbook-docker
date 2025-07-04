@@ -17,7 +17,7 @@ function rocksdb_install(){
   echo -e "| Installing RocksDB [$ROCKSDB_VERSION]..."
   echo -e "| PATH: $HOME/rocksdb"
   cd $HOME && git clone -b $ROCKSDB_VERSION --depth 1 https://github.com/facebook/rocksdb.git > /dev/null 2>&1
-  cd $HOME/rocksdb && CFLAGS=-fPIC CXXFLAGS='-fPIC -Wno-error=deprecated-copy -Wno-error=pessimizing-move -Wno-error=class-memaccess' PORTABLE=1 DISABLE_WARNING_AS_ERROR=1 make -j 4 release
+  cd $HOME/rocksdb && CFLAGS=-fPIC CXXFLAGS='-fPIC -Wno-error=deprecated-copy -Wno-error=pessimizing-move -Wno-error=class-memaccess' PORTABLE=1 DISABLE_WARNING_AS_ERROR=1 make -j 4 release > /dev/null 2>&1
   if [[ -f $HOME/rocksdb/librocksdb.a ]]; then
    echo -e "| RocksDB BUILD [OK]..."
   else
