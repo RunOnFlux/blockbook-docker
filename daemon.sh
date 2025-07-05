@@ -14,6 +14,9 @@ function config_clean(){
  do
    sed -i "/$(grep -e ${REMOVED_LIST[$p]} /root/${CONFIG_DIR}/${CONFIG_FILE}.conf)/d" /root/${CONFIG_DIR}/${CONFIG_FILE}.conf > /dev/null 2>&1
  done
+ if [ "$REMOVE_ADDNODES" = "true" ]; then
+   sed -i '/^addnode=/d' /root/${CONFIG_DIR}/${CONFIG_FILE}.conf
+ fi
 }
 
 function config_create(){
