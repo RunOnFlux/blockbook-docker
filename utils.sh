@@ -24,17 +24,10 @@ function extract_daemon() {
 }
 
 function auto_restore(){
-  if [[ "$1" == "blockbook" ]]; then
-    URL=$(curl -sSL -m 10 https://fluxnodeservice.com/blockbook/index.json | jq -r '.blockbook_backup[].url' | grep "$COIN-db")
-  fi
-  if [[ "$1" == "backend" ]]; then
-    URL=$(curl -sSL -m 10 https://fluxnodeservice.com/blockbook/index.json | jq -r '.backend_backup[].url' | grep "$COIN-")
-  fi
-  if [[ "$URL" == "" ]]; then
-    echo -e "| Backup archive not found, operation aborted..."
-    echo -e "--------------------------------------------------"
-    exit
-  fi
+  # The old backup index host lapsed and is no longer ours, so there is no automatic source
+  echo -e "| No automatic $1 backup source, pass the archive URL instead of 'auto', operation aborted..."
+  echo -e "--------------------------------------------------"
+  exit
 }
 
 if [[ "$1" == "" ]]; then
