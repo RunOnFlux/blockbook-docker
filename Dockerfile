@@ -9,7 +9,9 @@ ARG ZEBRA_VERSION=6.4.2
 
 FROM zfnd/zebra:${ZEBRA_VERSION} AS zebra
 
-FROM debian:12 AS build
+# Same Debian as the runtime stage: zmq4 refuses to start when the libzmq it
+# was built against differs from the one it runs with (4.3.4 vs 4.3.5).
+FROM debian:13 AS build
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG BLOCKBOOK_REPO=https://github.com/trezor/blockbook.git
 ARG BLOCKBOOK_COMMIT=3e6a90a287fb4e6d597978baf0aceeec985b5e41
@@ -84,7 +86,7 @@ RUN for coin in $(jq -r 'keys[]' /tmp/overrides.json); do \
     echo "blockbook $(jq -r .version configs/environ.json) $(git rev-parse --short HEAD)" > /out/VERSION
 
 # zebrad (copied from zfnd/zebra, built on Debian 13) needs glibc 2.39 and
-# CXXABI_1.3.15; blockbook built on Debian 12 runs on the newer glibc too.
+# CXXABI_1.3.15.
 FROM debian:13-slim
 # Links the ghcr.io package to this repository.
 LABEL org.opencontainers.image.source=https://github.com/RunOnFlux/blockbook-docker
