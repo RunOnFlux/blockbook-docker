@@ -174,11 +174,24 @@ function cdn_speedtest() {
         echo -e "| Best server: $DOWNLOAD_URL"
 }
 
+# The daemon is found by its command line: while it shuts down it renames its
+# main thread (bitcoind becomes "b-shutoff"), and a wait on the process name
+# returned while it was still flushing its databases. A snapshot or a wipe
+# that followed then caught them half written.
+function daemon_pattern() {
+  echo "^([^ ]*/)?${BINARY_NAME}( |$)"
+}
+
+function stop_daemon() {
+  pkill -TERM -f "$(daemon_pattern)"
+  for i in $(seq 1 280); do pgrep -f "$(daemon_pattern)" > /dev/null || return 0; sleep 1; done
+  pkill -9 -f "$(daemon_pattern)"
+}
+
 stop_script() {
   echo -e "| Stopping daemon (EXIT)..."
   if [[ "$BINARY_NAME" != "" ]]; then
-    pkill -TERM -x "$BINARY_NAME"
-    for i in $(seq 1 280); do pgrep -x "$BINARY_NAME" > /dev/null || break; sleep 1; done
+    stop_daemon
   fi
   exit 0
 }
@@ -255,9 +268,9 @@ if [[ "$BOOTSTRAP" == "1" && ! -f /root/BOOTSTRAP_LOCKED ]]; then
 fi
 touch /run/bb/daemon_bootstrap_done
 
-if [[ "$BINARY_NAME" != "" ]]; then
+if [[ "$BINARY_NAME" != "" ]] && pgrep -f "$(daemon_pattern)" > /dev/null; then
   echo -e "| Stopping daemon (START)..."
-  pkill -9 -x "$BINARY_NAME"
+  stop_daemon
 fi
 
 if [[ ! -f /root/blockbook.json ]]; then

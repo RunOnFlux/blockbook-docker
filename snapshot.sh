@@ -53,6 +53,19 @@ function link_tree() {
   done
 }
 
+# supervisorctl returns once the launcher has exited. Make sure the daemon has
+# too: a copy taken while it still flushes has empty databases.
+function daemon_stopped() {
+  local name
+  name=$(jq -r '.binary_name // empty' /root/daemon_config.json 2>/dev/null)
+  [[ -n "$name" ]] || return 0
+  for _ in $(seq 1 300); do
+    pgrep -f "^([^ ]*/)?${name}( |$)" > /dev/null || return 0
+    sleep 1
+  done
+  return 1
+}
+
 function bb_status() {
   curl -s -m 20 http://127.0.0.1:${BLOCKBOOK_PORT}/api/
 }
@@ -91,7 +104,11 @@ function create() {
   supervisorctl stop blockbook > /dev/null
   supervisorctl stop daemon > /dev/null
   local ok=1
-  link_tree $BACKEND ${SNAP}.new/backend 0 && link_tree $BBDB ${SNAP}.new/blockbook-db 1 || ok=0
+  if ! daemon_stopped; then
+    log "snapshot: the daemon did not stop"
+    ok=0
+  fi
+  [[ "$ok" == "1" ]] && link_tree $BACKEND ${SNAP}.new/backend 0 && link_tree $BBDB ${SNAP}.new/blockbook-db 1 || ok=0
   supervisorctl start daemon > /dev/null
   supervisorctl start blockbook > /dev/null
   if [[ "$ok" != "1" ]]; then
@@ -238,6 +255,7 @@ function reseed() {
   (( ${indexed:-0} * 10 < height * 9 )) || return 0
   log "reseed: indexed ${indexed:-0}, a peer has a snapshot at $height, reseeding"
   supervisorctl stop blockbook daemon > /dev/null
+  daemon_stopped || { log "reseed: the daemon did not stop"; supervisorctl start daemon blockbook > /dev/null; return 1; }
   restore 0 1
   supervisorctl start daemon blockbook > /dev/null
 }

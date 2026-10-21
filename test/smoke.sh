@@ -62,6 +62,12 @@ wait_for 300 "B: seeded from A and serving height 150" height_is bb-b 150
 docker exec bb-b grep -q "restored from $A_IP" /root/bootstrap.log
 [[ "$(cli bb-b getblockcount)" == "150" ]]
 
+# supervisorctl stop returns only once the daemon has exited: bitcoind renames
+# itself b-shutoff while it flushes, and a wait on its name returned too early.
+docker exec bb-a bash -c 'supervisorctl stop daemon > /dev/null; ! pgrep -f "^([^ ]*/)?bitcoind( |$)"'
+docker exec bb-a supervisorctl start daemon > /dev/null
+wait_for 120 "A: bitcoind back after a stop" cli bb-a getblockcount
+
 TIP=$(cli bb-a getblockhash 140)
 cli bb-a invalidateblock "$TIP"
 [[ "$(cli bb-a getblockcount)" == "139" ]]
