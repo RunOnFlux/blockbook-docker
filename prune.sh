@@ -24,7 +24,7 @@ function cli() {
     -rpcuser="$(jq -r .rpc_user /root/blockchaincfg.json)" -rpcpassword="$(jq -r .rpc_pass /root/blockchaincfg.json)" "$@"
 }
 
-INDEXED=$(curl -s -m 20 http://127.0.0.1:${BLOCKBOOK_PORT}/api | jq -r '.blockbook.bestHeight // 0' 2>/dev/null)
+INDEXED=$(curl -s -m 20 http://127.0.0.1:${BLOCKBOOK_PORT}/api/ | jq -r '.blockbook.bestHeight // 0' 2>/dev/null)
 INDEXED=${INDEXED:-0}
 if (( INDEXED > KEEP + 288 )); then
   cli pruneblockchain $((INDEXED - KEEP)) > /dev/null 2>&1

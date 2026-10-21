@@ -54,7 +54,7 @@ function link_tree() {
 }
 
 function bb_status() {
-  curl -s -m 20 http://127.0.0.1:${BLOCKBOOK_PORT}/api
+  curl -s -m 20 http://127.0.0.1:${BLOCKBOOK_PORT}/api/
 }
 
 function create() {

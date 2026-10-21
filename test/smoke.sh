@@ -33,7 +33,7 @@ wait_for() { # seconds description command...
 }
 # set -e ignores a failing "! cmd", so negative checks go through this.
 refute() { if "$@" > /dev/null 2>&1; then echo "FAILED: expected to fail: $*"; exit 1; fi; }
-api() { docker exec "$1" curl -sf http://127.0.0.1:19121/api; }
+api() { docker exec "$1" curl -sf http://127.0.0.1:19121/api/; }
 height_is() { [[ "$(api "$1" | jq -r .blockbook.bestHeight)" == "$2" ]]; }
 cli() { local c=$1; shift; docker exec "$c" bitcoin-cli -conf=$CONF -rpcuser=rpc -rpcpassword=rpc "$@"; }
 
