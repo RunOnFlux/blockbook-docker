@@ -91,9 +91,11 @@ FROM debian:13-slim
 # Links the ghcr.io package to this repository.
 LABEL org.opencontainers.image.source=https://github.com/RunOnFlux/blockbook-docker
 ENV DEBIAN_FRONTEND=noninteractive
+# The daemons downloaded at start need only glibc (2.34 at most), libgcc_s,
+# libstdc++ (fluxd) and libatomic (Bitcoin Cash Node 29), checked 2026-10-21.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget jq bc supervisor cron procps pv libarchive-tools unzip xz-utils \
-    python3 libsnappy1v5 libzstd1 liblz4-1 libbz2-1.0 zlib1g libzmq5 libgflags2.2 libstdc++6 && \
+    python3 libsnappy1v5 libzstd1 liblz4-1 libbz2-1.0 zlib1g libzmq5 libgflags2.2 libstdc++6 libatomic1 && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /out/blockbook /opt/blockbook/blockbook
