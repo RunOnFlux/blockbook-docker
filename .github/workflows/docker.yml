@@ -1,0 +1,64 @@
+name: image
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GHCR_IMAGE: ghcr.io/runonflux/blockbook-docker
+      HUB_IMAGE: runonflux/blockbook-docker
+      HAS_HUB: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell syntax
+        run: for f in *.sh test/*.sh; do bash -n "$f"; done && python3 -m py_compile snapshot_server.py
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: blockbook-docker:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        run: bash test/smoke.sh blockbook-docker:test
+
+      - name: Log in to ghcr.io
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: startsWith(github.ref, 'refs/tags/v') && env.HAS_HUB == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG=${GITHUB_REF_NAME}
+          for image in $GHCR_IMAGE $([ "$HAS_HUB" = "true" ] && echo $HUB_IMAGE); do
+            docker tag blockbook-docker:test $image:$TAG
+            docker push $image:$TAG
+          done

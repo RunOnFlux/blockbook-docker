@@ -1,0 +1,45 @@
+{
+  "flux": {
+    "backend": {
+      "version": "9.1.0",
+      "binary_url": "https://github.com/RunOnFlux/fluxd/releases/download/v9.1.0/Flux-amd64-v9.1.0.tar.gz"
+    }
+  },
+  "zcash": {
+    "backend": {
+      "version": "6.4.2"
+    }
+  },
+  "bcash": {
+    "backend": {
+      "version": "29.2.0",
+      "binary_url": "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.2.0/bitcoin-cash-node-29.2.0-x86_64-linux-gnu.tar.gz"
+    }
+  },
+  "digibyte": {
+    "backend": {
+      "version": "8.26.2",
+      "binary_url": "https://github.com/DigiByte-Core/digibyte/releases/download/v8.26.2/digibyte-8.26.2-x86_64-linux-gnu.tar.gz",
+      "additional_params": {
+        "addnode": ["64.182.71.16:12024", "97.248.2.109:12024", "5.9.193.22:12024", "65.108.72.71:12024"],
+        "seednode": "seed.diginode.tools"
+      }
+    }
+  },
+  "bgold": {
+    "backend": {
+      "additional_params": {
+        "addnode": ["162.19.139.182:8338", "162.19.139.181:8338", "92.218.61.167:8338", "13.115.32.229:8338"],
+        "seednode": "dnsseed.btgofficial.org"
+      }
+    }
+  },
+  "viacoin": {
+    "backend": {
+      "additional_params": {
+        "addnode": ["204.168.233.210:5223"],
+        "seednode": "seed.viacoin.net"
+      }
+    }
+  }
+}

@@ -56,26 +56,17 @@ if [[ -f /usr/local/bin/beacon-chain ]]; then
  bash -c "$(jq -r .cmd_consensus /root/consensus.json)"
  exit
 fi
-sleep 60
+CONSENSUS_CONFIG=/opt/blockbook/configs/coins/${COIN}_consensus.json
+if [[ ! -f $CONSENSUS_CONFIG ]]; then
+  # Most coins have no consensus client; exiting 0 is the expected outcome.
+  exit 0
+fi
+until [[ -f /run/bb/prepared && -f /run/bb/bootstrapped ]]; do
+  sleep 10
+done
 echo -e "---------------------------------------------------"
-echo -e "| Checking consensus client requriment ${COIN}..."
-if [[ "$BLOCKBOOKGIT_URL" == "" ]]; then
-  BLOCKBOOKGIT_URL="https://github.com/trezor/blockbook.git"
-fi
-echo -e "| GITHUB URL: $BLOCKBOOKGIT_URL"
-re="^(https|git)(:\/\/|@)([^\/:]+)[\/:]([^\/:]+)\/(.+)(.git)*$"
-if [[ $BLOCKBOOKGIT_URL =~ $re ]]; then
-  GIT_USER=${BASH_REMATCH[4]}
-  REPO=$(cut -d "." -f 1 <<< ${BASH_REMATCH[5]})
-fi
-RAW_CONSENSUS_URL="https://raw.githubusercontent.com/$GIT_USER/$REPO/$TAG/configs/coins/${COIN}_consensus.json"
-CLIENT_CONFIG=$(curl -SsL $RAW_CONSENSUS_URL 2>/dev/null | jq .  2>/dev/null)
-if [[ $(jq -r . 2>/dev/null <<< "$CLIENT_CONFIG") == "" || $(jq -r . 2>/dev/null <<< "$CLIENT_CONFIG") == "null" ]]; then
-  echo -e "| CONSENSUS CLIENT: Not required (EXIT)"
-  echo -e "---------------------------------------------------"
-  exit
-fi
-echo -e "| CONSENSUS CONFIG: $RAW_CONSENSUS_URL"
+echo -e "| Consensus client required for ${COIN}: $CONSENSUS_CONFIG"
+CLIENT_CONFIG=$(jq . $CONSENSUS_CONFIG)
 create_consensus_config
 parse_template "$CLIENT_CONFIG" "cmd_consensus" "consensus" "consensus"
 mkdir -p /root/${COIN}_consensus/backend 2>/dev/null
