@@ -51,6 +51,11 @@ RUN VERSION=$(jq -r .version configs/environ.json) && \
       -X github.com/trezor/blockbook/common.gitcommit=$(git rev-parse --short HEAD) \
       -X github.com/trezor/blockbook/common.buildtime=$(date --iso-8601=seconds)"
 
+# The config generator writes bitcoind's rpcauth line with
+# build/scripts/rpcauth.py; without python3 it silently leaves the line out
+# and the daemon refuses every RPC login.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+
 # Coin overrides (daemon versions we need ahead of upstream), then every coin's
 # blockchaincfg.json and backend server.conf rendered with the container's
 # paths, so nothing has to be compiled or fetched from GitHub at run time.
@@ -73,6 +78,7 @@ RUN for coin in $(jq -r 'keys[]' /tmp/overrides.json); do \
     echo "coins rendered: $(ls /out/pkg | wc -l)" && \
     test -f /out/pkg/flux/blockchaincfg.json && test -f /out/pkg/zcash/server.conf && \
     grep -q 'cache_dir = "/root/zcash/backend/zebra"' /out/pkg/zcash/server.conf && \
+    grep -q '^rpcauth=rpc:' /out/pkg/bitcoin/server.conf && grep -q '^rpcauth=rpc:' /out/pkg/bitcoin_regtest/server.conf && \
     mkdir -p /out/configs && cp -r configs/coins /out/configs/ && cp configs/environ.json /out/configs/ && \
     cp -r static /out/static && \
     echo "blockbook $(jq -r .version configs/environ.json) $(git rev-parse --short HEAD)" > /out/VERSION
