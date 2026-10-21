@@ -16,7 +16,9 @@ CONF=/root/$COIN/$COIN.conf
 
 cleanup() {
   for c in bb-a bb-b bb-p bb-bcash bb-flux; do
-    echo "::group::logs $c"; docker exec $c bash -c 'tail -n 40 /root/*.log' 2>/dev/null || true; echo "::endgroup::"
+    echo "::group::logs $c"
+    docker exec $c bash -c 'supervisorctl status; ps -eo pid,etime,args | cut -c1-200; tail -n 80 /root/*.log' 2>/dev/null || true
+    echo "::endgroup::"
   done
   docker rm -f bb-a bb-b bb-p bb-bcash bb-flux > /dev/null 2>&1 || true
   docker network rm $NET > /dev/null 2>&1 || true
@@ -24,17 +26,20 @@ cleanup() {
 trap cleanup EXIT
 
 wait_for() { # seconds description command...
-  local t=$1 what=$2; shift 2
+  local t=$1 what=$2 out=; shift 2
   for _ in $(seq 1 "$t"); do
-    if "$@" > /dev/null 2>&1; then echo "ok: $what"; return 0; fi
+    if out=$("$@" 2>&1); then echo "ok: $what"; return 0; fi
     sleep 1
   done
-  echo "FAILED: $what"; return 1
+  echo "FAILED: $what"; echo "last attempt: ${out:0:1000}"; return 1
 }
 # set -e ignores a failing "! cmd", so negative checks go through this.
 refute() { if "$@" > /dev/null 2>&1; then echo "FAILED: expected to fail: $*"; exit 1; fi; }
-api() { docker exec "$1" curl -sf http://127.0.0.1:19121/api/; }
-height_is() { [[ "$(api "$1" | jq -r .blockbook.bestHeight)" == "$2" ]]; }
+api() { docker exec "$1" curl -sSf -m 20 http://127.0.0.1:19121/api/; }
+height_is() {
+  local s; s=$(api "$1") || return 1
+  [[ "$(jq -r .blockbook.bestHeight <<< "$s")" == "$2" ]] || { jq -c '{blockbook: .blockbook | {bestHeight, inSync, initialSync}, backend: .backend | {blocks, error}}' <<< "$s"; return 1; }
+}
 cli() { local c=$1; shift; docker exec "$c" bitcoin-cli -conf=$CONF -rpcuser=rpc -rpcpassword=rpc "$@"; }
 
 docker network create $NET > /dev/null
