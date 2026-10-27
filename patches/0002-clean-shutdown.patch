@@ -1,0 +1,165 @@
+diff --git a/bchain/mq.go b/bchain/mq.go
+index fe39a4bc..667c2d4c 100644
+--- a/bchain/mq.go
++++ b/bchain/mq.go
+@@ -55,6 +55,11 @@ func NewMQ(binding string, curve *CurveConfig, callback func(NotificationType),
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	// a SUB socket only has subscriptions to send; Context.Term in Shutdown must not
++	// wait for them when the backend is already gone
++	if err := socket.SetLinger(0); err != nil {
++		return nil, err
++	}
+ 	if subs.BlockSubscribe != "" {
+ 		if err := socket.SetSubscribe(subs.BlockSubscribe); err != nil {
+ 			return nil, err
+@@ -110,6 +115,9 @@ func (mq *MQ) run(callback func(NotificationType)) {
+ 		if r := recover(); r != nil {
+ 			glog.Error("MQ loop recovered from ", r)
+ 		}
++		// this goroutine is the only user of the socket, so it closes it; Context.Term
++		// in Shutdown returns once it is closed
++		mq.socket.Close()
+ 		mq.isRunning = false
+ 		glog.Info("MQ loop terminated")
+ 		mq.finished <- nil
+@@ -162,31 +170,13 @@ func (mq *MQ) run(callback func(NotificationType)) {
+ func (mq *MQ) Shutdown(ctx context.Context) error {
+ 	glog.Info("MQ server shutdown")
+ 	if mq.isRunning {
++		// A zmq socket must not be used by two threads at once. Unsubscribing and closing
++		// it here while run() waited in RecvMessageBytes made libzmq abort the process
++		// (SIGABRT) now and then, before the index was closed. Terminating the context
++		// instead makes that receive return ETERM, and run() closes the socket itself.
+ 		go func() {
+-			// if errors in the closing sequence, let it close ungracefully
+-			if mq.subs.BlockSubscribe != "" {
+-				if err := mq.socket.SetUnsubscribe(mq.subs.BlockSubscribe); err != nil {
+-					mq.finished <- err
+-					return
+-				}
+-			}
+-			if mq.subs.TxSubscribe != "" {
+-				if err := mq.socket.SetUnsubscribe(mq.subs.TxSubscribe); err != nil {
+-					mq.finished <- err
+-					return
+-				}
+-			}
+-			if err := mq.socket.Unbind(mq.binding); err != nil {
+-				mq.finished <- err
+-				return
+-			}
+-			if err := mq.socket.Close(); err != nil {
+-				mq.finished <- err
+-				return
+-			}
+ 			if err := mq.context.Term(); err != nil {
+ 				mq.finished <- err
+-				return
+ 			}
+ 		}()
+ 		var err error
+diff --git a/bchain/mq_shutdown_test.go b/bchain/mq_shutdown_test.go
+new file mode 100644
+index 00000000..70e6529f
+--- /dev/null
++++ b/bchain/mq_shutdown_test.go
+@@ -0,0 +1,80 @@
++package bchain
++
++import (
++	"context"
++	"testing"
++	"time"
++
++	zmq "github.com/pebbe/zmq4"
++)
++
++// Shutdown used to unsubscribe and close the socket while run() waited in
++// RecvMessageBytes on it, which libzmq does not allow: it returned an error
++// (the socket was never bound) and now and then aborted the whole process.
++// Shut down repeatedly, right after a notification and while idle.
++func TestMQShutdown(t *testing.T) {
++	subs := SubscriptionTopics{BlockSubscribe: "hashblock", BlockReceive: "hashblock", TxSubscribe: "hashtx", TxReceive: "hashtx"}
++	for i := 0; i < 40; i++ {
++		pubCtx, err := zmq.NewContext()
++		if err != nil {
++			t.Fatal(err)
++		}
++		pub, err := pubCtx.NewSocket(zmq.PUB)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if err := pub.SetLinger(0); err != nil {
++			t.Fatal(err)
++		}
++		if err := pub.Bind("tcp://127.0.0.1:*"); err != nil {
++			t.Fatal(err)
++		}
++		endpoint, err := pub.GetLastEndpoint()
++		if err != nil {
++			t.Fatal(err)
++		}
++		got := make(chan NotificationType, 1)
++		mq, err := NewMQ(endpoint, nil, func(nt NotificationType) {
++			select {
++			case got <- nt:
++			default:
++			}
++		}, subs)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if i%2 == 0 {
++			// a PUB socket drops messages until the subscription has reached it
++			deadline := time.After(10 * time.Second)
++			for delivered := false; !delivered; {
++				if _, err := pub.SendMessage("hashblock", []byte{1}, []byte{0, 0, 0, 0}); err != nil {
++					t.Fatal(err)
++				}
++				select {
++				case nt := <-got:
++					if nt != NotificationNewBlock {
++						t.Fatalf("iteration %d: notification %v, want NotificationNewBlock", i, nt)
++					}
++					delivered = true
++				case <-time.After(20 * time.Millisecond):
++				case <-deadline:
++					t.Fatalf("iteration %d: no notification", i)
++				}
++			}
++		} else {
++			// run() is blocked in RecvMessageBytes
++			time.Sleep(20 * time.Millisecond)
++		}
++		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
++		err = mq.Shutdown(ctx)
++		cancel()
++		if err != nil {
++			t.Fatalf("iteration %d: Shutdown: %v", i, err)
++		}
++		if mq.isRunning {
++			t.Fatalf("iteration %d: the receive loop is still running", i)
++		}
++		pub.Close()
++		pubCtx.Term()
++	}
++}
+diff --git a/db/sync.go b/db/sync.go
+index b2e46715..9b23c475 100644
+--- a/db/sync.go
++++ b/db/sync.go
+@@ -270,6 +270,12 @@ func (w *SyncWorker) ResyncIndex(onNewBlock bchain.OnNewBlockFunc, initialSync b
+ 		w.metrics.BlockbookBestHeight.Set(float64(bh))
+ 		return err
+ 	case syncNotNeeded:
++		// The internal state is only stored now and then, so after an unclean stop its
++		// best height can be behind the index (0 on a fresh one). With nothing to sync
++		// it was never corrected and /api/ reported that height until the next block.
++		if bh, _, err := w.db.GetBestBlock(); err == nil {
++			w.is.UpdateBestHeight(bh)
++		}
+ 		w.is.FinishedSyncNoChange()
+ 		w.metrics.IndexDBSize.Set(float64(w.db.DatabaseSizeOnDisk()))
+ 		if initialSync {

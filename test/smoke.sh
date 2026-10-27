@@ -54,10 +54,18 @@ cli bb-a generatetodescriptor 150 'raw(51)' > /dev/null
 wait_for 300 "A: blockbook indexed 150 blocks" height_is bb-a 150
 [[ "$(api bb-a | jq -r .blockbook.inSync)" == "true" ]]
 docker exec bb-a cat /opt/blockbook/VERSION
+# the explorer pages render with the fork's UI and its stylesheet is served
+HOME_PAGE=$(docker exec bb-a curl -sSf -m 20 http://127.0.0.1:19121/)
+HUB_CSS=$(grep -o '/static/css/hub[^"]*\.css' <<< "$HOME_PAGE" | head -1)
+[[ -n "$HUB_CSS" ]] || { echo "FAILED: the explorer home page has no hub stylesheet"; exit 1; }
+docker exec bb-a curl -sSf -m 20 -o /dev/null "http://127.0.0.1:19121$HUB_CSS"
+docker exec bb-a curl -sSf -m 20 -o /dev/null "http://127.0.0.1:19121/block/1"
 
 docker exec bb-a bash -c '. /run/bb/env.sh; /snapshot.sh create'
 docker exec bb-a cat /root/snapshot/info.json | jq -e '.height == 150 and .bytes > 0'
 wait_for 120 "A: blockbook back after the snapshot" height_is bb-a 150
+# blockbook used to abort now and then when stopped (patches/0002)
+refute docker exec bb-a grep -q "possibly previous ungraceful shutdown" /root/blockbook.log
 docker exec bb-a test ! -e /root/snapshot/backend/wallet.dat
 docker exec bb-a bash -c "test -z \"\$(find /root/snapshot -name '*.conf')\""
 

@@ -4,8 +4,11 @@
 Images are published as `ghcr.io/runonflux/blockbook-docker:<tag>` from `v*` git tags (CI builds and
 runs `test/smoke.sh` first). Pin app specs to a tag, never `latest`.
 
-- Blockbook, RocksDB and every coin's configs are built into the image from the trezor/blockbook
-  commit pinned in the `Dockerfile`; nothing is compiled or fetched from GitHub at container start.
+- Blockbook, RocksDB and every coin's configs are built into the image from the
+  [ZelCore-io/blockbook](https://github.com/ZelCore-io/blockbook) commit pinned in the `Dockerfile`
+  (trezor/blockbook with the Flux/Zelcore explorer UI); nothing is compiled or fetched from GitHub
+  at container start. The fork's dashboard feed (`-explorercontenturl`) and Insight API
+  (`-insight`) are off unless passed in `BLOCKBOOK_PARAMS`.
   Daemon versions come from that commit's coin configs, with `overrides.json` on top
   (fluxd 9.1.0, zebrad for Zcash, which is copied in from `zfnd/zebra`).
 - When the image changes, an existing container re-renders its configs and downloads the new
@@ -17,6 +20,10 @@ runs `test/smoke.sh` first). Pin app specs to a tag, never `latest`.
   `SNAPSHOT_PEERS="ip:port ..."` seeds from given peers.
 - `heal.sh` runs `reconsiderblock` when the daemon has marked the network's chain invalid and
   stopped on its last good block.
+- Blockbook stops cleanly (`patches/0002`). It closed its ZMQ socket from another thread while a
+  receive was waiting on it, so libzmq aborted the process now and then and the index was left
+  marked open. After such a stop, `/api/` showed the last stored height (0 on a new index) until
+  the next block.
 - `corruption.sh` only wipes a database its own process reports as corrupt or refuses to open
   (another coin, other index settings); `log_clean` only empties named log files (it used to empty
   LevelDB/RocksDB write-ahead logs).

@@ -13,8 +13,9 @@ FROM zfnd/zebra:${ZEBRA_VERSION} AS zebra
 # was built against differs from the one it runs with (4.3.4 vs 4.3.5).
 FROM debian:13 AS build
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-ARG BLOCKBOOK_REPO=https://github.com/trezor/blockbook.git
-ARG BLOCKBOOK_COMMIT=3e6a90a287fb4e6d597978baf0aceeec985b5e41
+# Zelcore's fork of trezor/blockbook: the Flux/Zelcore explorer UI and an optional Insight API
+ARG BLOCKBOOK_REPO=https://github.com/ZelCore-io/blockbook.git
+ARG BLOCKBOOK_COMMIT=423f085a181435450a55f4ea30a20adb7ba9269d
 ARG GOLANG_VERSION=go1.25.4
 ARG GOLANG_SHA256=9fa5ffeda4170de60f67f3aa0f824e426421ba724c21e133c1e35d6159ca1bec
 ARG ROCKSDB_VERSION=v9.10.0
@@ -41,8 +42,9 @@ WORKDIR /src/blockbook
 COPY patches /tmp/patches
 RUN for p in /tmp/patches/*.patch; do git apply --verbose "$p" || exit 1; done
 RUN go mod download
-# patches/0001 against a fake pruned bitcoind
-RUN go test -count=1 -run 'Pruned' ./bchain/coins/btc/
+# patches/0001 against a fake pruned bitcoind, patches/0002 against a zmq publisher
+RUN go test -count=1 -run 'Pruned' ./bchain/coins/btc/ && go test -count=1 -run 'MQShutdown' ./bchain/ && \
+    go test -count=1 ./explorercontent/ ./static/templates/
 
 ENV CGO_CFLAGS="-I/opt/rocksdb/include -O -D__BLST_PORTABLE__" \
     CGO_CFLAGS_ALLOW="-O -D__BLST_PORTABLE__"
@@ -50,7 +52,7 @@ RUN VERSION=$(jq -r .version configs/environ.json) && \
     export CGO_LDFLAGS="-L/opt/rocksdb -ldl -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -llz4 -lzstd $(gcc -print-file-name=libjemalloc_pic.a)" && \
     go build -o /out/blockbook -ldflags="-s -w \
       -X github.com/trezor/blockbook/common.version=${VERSION} \
-      -X github.com/trezor/blockbook/common.gitcommit=$(git rev-parse --short HEAD) \
+      -X github.com/trezor/blockbook/common.gitcommit=$(git rev-parse HEAD) \
       -X github.com/trezor/blockbook/common.buildtime=$(date --iso-8601=seconds)"
 
 # The config generator writes bitcoind's rpcauth line with
