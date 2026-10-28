@@ -57,6 +57,12 @@ SHELL=/bin/bash
 EOF
 chmod 644 /etc/cron.d/blockbook
 crontab -r 2>/dev/null
+# cron reloads a file when its mtime changes, in whole seconds. crond starts
+# alongside this script, and when it read /etc/cron.d in the second the file
+# was written, it never ran a single job (no corruption checks, no pruning).
+# A second later mtime tells it the file changed.
+sleep 2
+touch /etc/cron.d/blockbook /etc/cron.d
 
 touch /run/bb/prepared
 echo -e "| Configs ready"

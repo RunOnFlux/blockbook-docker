@@ -54,6 +54,9 @@ cli bb-a generatetodescriptor 150 'raw(51)' > /dev/null
 wait_for 300 "A: blockbook indexed 150 blocks" height_is bb-a 150
 [[ "$(api bb-a | jq -r .blockbook.inSync)" == "true" ]]
 docker exec bb-a cat /opt/blockbook/VERSION
+# cron loads its file only if its mtime is later than the second cron read it
+docker exec bb-a bash -c '(( $(stat -c %Y /etc/cron.d/blockbook) > $(date -d "$(ps -o lstart= -p $(pgrep -x cron))" +%s) ))' \
+  || { echo "FAILED: the cron file was not touched after cron started"; exit 1; }
 # the explorer pages render with the fork's UI and its stylesheet is served
 HOME_PAGE=$(docker exec bb-a curl -sSf -m 20 http://127.0.0.1:19121/)
 HUB_CSS=$(grep -o '/static/css/hub[^"]*\.css' <<< "$HOME_PAGE" | head -1)
