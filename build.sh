@@ -49,7 +49,7 @@ echo "$IMAGE_VERSION" > /root/.image_version
 cat > /etc/cron.d/blockbook <<'EOF'
 SHELL=/bin/bash
 0 0 */5 * * root . /run/bb/env.sh; /utils.sh log_clean >> /root/maintenance.log 2>&1
-15 */2 * * * root . /run/bb/env.sh; flock -n /run/bb/corruption.lock /corruption.sh >> /root/maintenance.log 2>&1
+5,35 * * * * root . /run/bb/env.sh; flock -n /run/bb/corruption.lock /corruption.sh >> /root/maintenance.log 2>&1
 */30 * * * * root . /run/bb/env.sh; flock -n /run/bb/heal.lock /heal.sh >> /root/maintenance.log 2>&1
 */20 * * * * root . /run/bb/env.sh; flock -n /run/bb/snapshot.lock /snapshot.sh create >> /root/maintenance.log 2>&1
 */5 * * * * root . /run/bb/env.sh; flock -n /run/bb/prune.lock /prune.sh >> /root/maintenance.log 2>&1

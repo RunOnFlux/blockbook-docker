@@ -2,7 +2,10 @@
 
 ### v3: pinned image
 Images are published as `ghcr.io/runonflux/blockbook-docker:<tag>` from `v*` git tags (CI builds and
-runs `test/smoke.sh` first). Pin app specs to a tag, never `latest`.
+runs `test/smoke.sh` first). Pin app specs to a tag, never `latest`. Every `v3.*` release also
+moves `v3` and `v3.0.0` (the tag the app specs use): Flux nodes check an app's tag every 6 hours
+and redeploy it in place with its data kept, while a spec update installs the app afresh
+wherever the network places it.
 
 - Blockbook, RocksDB and every coin's configs are built into the image from the
   [ZelCore-io/blockbook](https://github.com/ZelCore-io/blockbook) commit pinned in the `Dockerfile`
@@ -26,7 +29,14 @@ runs `test/smoke.sh` first). Pin app specs to a tag, never `latest`.
   the next block.
 - `corruption.sh` only wipes a database its own process reports as corrupt or refuses to open
   (another coin, other index settings); `log_clean` only empties named log files (it used to empty
-  LevelDB/RocksDB write-ahead logs).
+  LevelDB/RocksDB write-ahead logs). It runs every 30 minutes.
+- The first sync with several workers is a bulk import: blockbook holds large maps of
+  transactions and balances in memory and marks the index inconsistent until it ends. Killed
+  before that (out of memory, shared with the daemon), it leaves an index it refuses to open.
+  `corruption.sh` rebuilds such an index (from a peer's snapshot if one has it) and
+  `/root/blockbook-db.sequential` makes blockbook sync with one worker from then on: slower,
+  much less memory, consistent after every block. Blockbook runs with `GOMEMLIMIT` at half the
+  container's memory (80% without a local daemon).
 - `PRUNE_BACKEND=1` (Bitcoin): the daemon runs without txindex and with manual pruning, and
   `prune.sh` keeps it `PRUNE_KEEP_BLOCKS` (2000) behind blockbook, pausing it at
   `PRUNE_MAX_BLOCKS_GB` (80) of unindexed blocks. Blockbook (`-prunedbackend`, `patches/0001`)

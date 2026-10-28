@@ -50,6 +50,22 @@ if [[ ! -d /root/blockbook-db ]]; then
   mkdir -p /root/blockbook-db
 fi
 
+# The first sync with several workers is a bulk import: it keeps large maps of
+# transactions and balances in memory and leaves the index unusable if it is
+# killed before it ends. After that happened once (corruption.sh), one worker:
+# slower, much less memory, and the index is consistent after every block.
+if [[ -z "$WORKERS" && -f /root/blockbook-db.sequential ]]; then
+  WORKERS=1
+fi
+# Go collects garbage harder near this limit instead of letting its heap grow
+# to twice what is live. Blockbook shares the container with the daemon.
+mem_max=$(cat /sys/fs/cgroup/memory.max 2>/dev/null)
+if [[ -z "$GOMEMLIMIT" && "$mem_max" =~ ^[0-9]+$ ]]; then
+  if [[ "${DAEMON:-1}" == "1" ]]; then share=50; else share=80; fi
+  export GOMEMLIMIT="$(( mem_max / 1048576 * share / 100 ))MiB"
+  echo -e "| GOMEMLIMIT=$GOMEMLIMIT"
+fi
+
 # -dbcache is in bytes: the old default of 500 gave RocksDB a 500 byte cache.
 exec_string="$HOME/blockbook/blockbook -sync -blockchaincfg=$CFG_FILE -datadir=/root/blockbook-db -workers=${WORKERS:-4} -dbcache=${DBCACHE:-536870912} -public=:${BLOCKBOOK_PORT} -logtostderr"
 args_to_remove=( -datadir -debug -log -blockchaincfg -sync -logtostderr -public )

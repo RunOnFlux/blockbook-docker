@@ -70,10 +70,20 @@ docker exec bb-a test ! -e /root/snapshot/backend/wallet.dat
 docker exec bb-a bash -c "test -z \"\$(find /root/snapshot -name '*.conf')\""
 
 A_IP=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$NET\").IPAddress}}" bb-a)
-run bb-b -e PEER_BOOTSTRAP=1 -e SNAPSHOT_PEERS="$A_IP:1337"
+run bb-b --memory=4g -e PEER_BOOTSTRAP=1 -e SNAPSHOT_PEERS="$A_IP:1337"
 wait_for 300 "B: seeded from A and serving height 150" height_is bb-b 150
 docker exec bb-b grep -q "restored from $A_IP" /root/bootstrap.log
 [[ "$(cli bb-b getblockcount)" == "150" ]]
+# A first sync killed out of memory leaves the index marked inconsistent, and
+# blockbook refuses to open it. corruption.sh rebuilds it (from A's snapshot
+# here) and blockbook continues with one worker.
+docker exec bb-b bash -c 'echo "E1028 blockbook.go:292] internalState: database is in inconsistent state and cannot be used" >> /root/blockbook.log; . /run/bb/env.sh; /corruption.sh'
+docker exec bb-b test -f /root/blockbook-db.sequential
+wait_for 300 "B: index rebuilt after an interrupted first sync" height_is bb-b 150
+B_PID=$(docker exec bb-b pgrep -x blockbook)
+B_ARGS=$(docker exec bb-b bash -c "tr '\0' ' ' < /proc/$B_PID/cmdline")
+[[ "$B_ARGS" == *-workers=1* ]] || { echo "FAILED: B blockbook args: $B_ARGS"; exit 1; }
+docker exec bb-b bash -c "tr '\0' '\n' < /proc/$B_PID/environ | grep -q '^GOMEMLIMIT=[0-9]*MiB$'"
 
 # supervisorctl stop returns only once the daemon has exited: bitcoind renames
 # itself b-shutoff while it flushes, and a wait on its name returned too early.

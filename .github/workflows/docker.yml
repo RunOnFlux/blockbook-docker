@@ -58,7 +58,14 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           TAG=${GITHUB_REF_NAME}
+          # Flux nodes check an app's image tag every 6 hours and redeploy the app
+          # in place, data kept, when the tag points at a new image; a spec update
+          # installs it afresh wherever the network places it. So a v3 release also
+          # moves v3 and v3.0.0, the tag the app specs use.
+          TAGS=$(case $TAG in v3.*) echo "$TAG v3 v3.0.0" ;; *) echo "$TAG" ;; esac | tr ' ' '\n' | sort -u)
           for image in $GHCR_IMAGE $([ "$HAS_HUB" = "true" ] && echo $HUB_IMAGE); do
-            docker tag blockbook-docker:test $image:$TAG
-            docker push $image:$TAG
+            for t in $TAGS; do
+              docker tag blockbook-docker:test $image:$t
+              docker push $image:$t
+            done
           done
