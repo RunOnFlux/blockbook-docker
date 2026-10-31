@@ -15,7 +15,7 @@ FROM debian:13 AS build
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Zelcore's fork of trezor/blockbook: the Flux/Zelcore explorer UI and an optional Insight API
 ARG BLOCKBOOK_REPO=https://github.com/ZelCore-io/blockbook.git
-ARG BLOCKBOOK_COMMIT=423f085a181435450a55f4ea30a20adb7ba9269d
+ARG BLOCKBOOK_COMMIT=f4595896869d663c2e69bdd2b86524f8a5049e4c
 ARG GOLANG_VERSION=go1.25.4
 ARG GOLANG_SHA256=9fa5ffeda4170de60f67f3aa0f824e426421ba724c21e133c1e35d6159ca1bec
 ARG ROCKSDB_VERSION=v9.10.0
