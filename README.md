@@ -1,5 +1,57 @@
 # Multicoin Blockbook Explorer
 
+### v3: pinned image
+Images are published as `ghcr.io/runonflux/blockbook-docker:<tag>` from `v*` git tags (CI builds and
+runs `test/smoke.sh` first). Pin app specs to a tag, never `latest`. Every `v3.*` release also
+moves `v3` and `v3.0.0` (the tag the app specs use): Flux nodes check an app's tag every 6 hours
+and redeploy it in place with its data kept, while a spec update installs the app afresh
+wherever the network places it.
+
+- Blockbook, RocksDB and every coin's configs are built into the image from the
+  [ZelCore-io/blockbook](https://github.com/ZelCore-io/blockbook) commit pinned in the `Dockerfile`
+  (trezor/blockbook with the Flux/Zelcore explorer UI); nothing is compiled or fetched from GitHub
+  at container start. The fork's dashboard feed (`-explorercontenturl`) and Insight API
+  (`-insight`) are off unless passed in `BLOCKBOOK_PARAMS`.
+  Daemon versions come from that commit's coin configs, with `overrides.json` on top
+  (fluxd 9.1.0, zebrad for Zcash, which is copied in from `zfnd/zebra`).
+- When the image changes, an existing container re-renders its configs and downloads the new
+  daemon; chain data is kept.
+- **Peer snapshots** (`snapshot.sh`, `snapshot_server.py`): a synced instance keeps a hard-link
+  snapshot of its chain data and serves it on container port 1337 to the other instances of the same
+  Flux app. A new or far-behind instance seeds from the best peer instead of syncing from block 0.
+  Needs port 1337 mapped in the app spec. `PEER_BOOTSTRAP=0` disables seeding,
+  `SNAPSHOT_PEERS="ip:port ..."` seeds from given peers.
+- `heal.sh` runs `reconsiderblock` when the daemon has marked the network's chain invalid and
+  stopped on its last good block.
+- Blockbook stops cleanly (`patches/0002`). It closed its ZMQ socket from another thread while a
+  receive was waiting on it, so libzmq aborted the process now and then and the index was left
+  marked open. After such a stop, `/api/` showed the last stored height (0 on a new index) until
+  the next block.
+- `corruption.sh` only wipes a database its own process reports as corrupt or refuses to open
+  (another coin, other index settings); `log_clean` only empties named log files (it used to empty
+  LevelDB/RocksDB write-ahead logs). It runs every 30 minutes.
+- The first sync with several workers is a bulk import: blockbook holds large maps of
+  transactions and balances in memory and marks the index inconsistent until it ends. Killed
+  before that (out of memory, shared with the daemon), it leaves an index it refuses to open.
+  `corruption.sh` rebuilds such an index (from a peer's snapshot if one has it) and
+  `/root/blockbook-db.sequential` makes blockbook sync with one worker from then on: slower,
+  much less memory, consistent after every block. Blockbook runs with `GOMEMLIMIT` at half the
+  container's memory (80% without a local daemon).
+- `PRUNE_BACKEND=1` (Bitcoin): the daemon runs without txindex and with manual pruning, and
+  `prune.sh` keeps it `PRUNE_KEEP_BLOCKS` (2000) behind blockbook, pausing it at
+  `PRUNE_MAX_BLOCKS_GB` (80) of unindexed blocks. Blockbook (`-prunedbackend`, `patches/0001`)
+  gets a confirmed transaction from the block its index places it in, and downloads a pruned
+  block again from a peer that keeps every block (`getblockfrompeer`), so transactions, address
+  and xpub histories, `tx-specific` and blocks come back complete. The first request for an old
+  transaction waits for that download (about a second; a history page downloads up to 8 blocks
+  at once, and at most 8 run at a time overall); after that it is in the tx cache, which is
+  emptied when it passes `TXCACHE_MAX_GB` (20). Without `-extendedindex` Bitcoin needs ~640 GB
+  instead of ~1.1 TB plus 886 GB of blocks (2026); as on every other coin without it, a spent
+  output gets `spentTxId` only with `?spending=true`. If no peer sends a block, the transaction
+  comes from the index: fee and vsize included, scripts and input txids not.
+- Zebra releases stop at an end-of-support height about 16 weeks after release: bump
+  `ZEBRA_VERSION` in time.
+
 ### USAGE
 ```
 bash -i <(curl -s https://raw.githubusercontent.com/RunOnFlux/blockbook-docker/master/blockbook-docker_manager.sh)

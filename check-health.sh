@@ -32,19 +32,20 @@
    exit 1
  fi
 ## Checking Daemon
+ # Credentials from blockchaincfg.json: several backend configs only carry a
+ # hashed rpcauth line, which a CLI cannot log in with.
+ RPC_USER=$(jq -r ".rpc_user // \"$RPC_USER\"" /root/blockchaincfg.json 2>/dev/null || echo "$RPC_USER")
+ RPC_PASS=$(jq -r ".rpc_pass // \"$RPC_PASS\"" /root/blockchaincfg.json 2>/dev/null || echo "$RPC_PASS")
+ CLI_ARGS=(-rpcuser="$RPC_USER" -rpcpassword="$RPC_PASS")
  if [[ -f /root/${CONFIG_DIR}/${CONFIG_FILE}.conf ]]; then
-   CURRENT_NODE_HEIGHT=$(${CLI_NAME} -conf="/root/${CONFIG_DIR}/${CONFIG_FILE}.conf" -getinfo 2>/dev/null | jq .blocks)
-   if [[ "$CURRENT_NODE_HEIGHT" == "" ]]; then
-     CURRENT_NODE_HEIGHT=$(${CLI_NAME} -conf="/root/${CONFIG_DIR}/${CONFIG_FILE}.conf" getinfo 2>/dev/null | jq .blocks)
-   fi
- else
-   CURRENT_NODE_HEIGHT=$(${CLI_NAME} -rpcpassword="$RPC_PASS" -rpcuser="$RPC_USER" -getinfo 2>/dev/null | jq .blocks)
-   if [[ "$CURRENT_NODE_HEIGHT" == "" ]]; then
-     CURRENT_NODE_HEIGHT=$(${CLI_NAME} -rpcpassword="$RPC_PASS" -rpcuser="$RPC_USER" getinfo 2>/dev/null | jq .blocks)
-   fi
+   CLI_ARGS+=(-conf="/root/${CONFIG_DIR}/${CONFIG_FILE}.conf")
+ fi
+ CURRENT_NODE_HEIGHT=$(${CLI_NAME} "${CLI_ARGS[@]}" -getinfo 2>/dev/null | jq .blocks)
+ if [[ "$CURRENT_NODE_HEIGHT" == "" ]]; then
+   CURRENT_NODE_HEIGHT=$(${CLI_NAME} "${CLI_ARGS[@]}" getinfo 2>/dev/null | jq .blocks)
  fi
 
- if ! egrep -o "^[0-9]+$" <<< "$CURRENT_NODE_HEIGHT" &>/dev/null; then
+ if ! grep -Eq "^[0-9]+$" <<< "$CURRENT_NODE_HEIGHT"; then
   msg="$msg, Daemon = [FAILED]"
   echo -e "$msg"
   exit 1

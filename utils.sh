@@ -355,7 +355,7 @@ if [[ "$1" == "backup_share" ]]; then
   if [[ -d /root/backup_archive ]]; then
     echo -n "| "
     cd /root/backup_archive
-    python3 -m http.server 1337
+    python3 -m http.server ${SHARE_PORT:-1338}
   else
     echo -e "Backup directory not exist, operation aborted..."
   fi
@@ -402,14 +402,14 @@ if [[ "$1" == "log_clean" ]]; then
   echo -e "| LOG CLEANER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "--------------------------------------------------"
   LOG_SIZE_LIMIT=${LOG_SIZE_LIMIT:-20}
-  LOG_LIST=($(find /root -type f \( -name "$COIN*.log" -o -name "debug.log" -o -name "blockbook.log*" -o -name "*.log" \)))
+  # Named log files only. A "*.log" search also matched the write-ahead logs of
+  # LevelDB (chainstate, block index) and RocksDB (blockbook-db), and emptying
+  # those corrupts the database ("SST file is ahead of WALs").
+  LOG_LIST=($(ls /root/*.log /root/$CONFIG_DIR/backend/debug.log /root/$CONFIG_DIR/backend/db.log /root/$CONFIG_DIR/backend/zebra.log 2>/dev/null))
   LENGTH=${#LOG_LIST[@]}
   for (( j=0; j<${LENGTH}; j++ ));
   do
    LOG_PATH="${LOG_LIST[$j]}"
-   if [[  $(egrep "blocks" <<< $LOG_PATH) != "" ]]; then
-     continue
-   fi
    SIZE=$(ls -l --b=M  $LOG_PATH | cut -d " " -f5)
    #echo -e "| File: ${LOG_PATH} SIZE: ${SIZE}"
    if [[ $(egrep -o '[0-9]+' <<< $SIZE) -gt $LOG_SIZE_LIMIT ]]; then

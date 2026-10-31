@@ -1,0 +1,963 @@
+diff --git a/api/worker.go b/api/worker.go
+index f52ef3f3..2242e602 100644
+--- a/api/worker.go
++++ b/api/worker.go
+@@ -288,6 +288,9 @@ func (w *Worker) GetRawTransaction(txid string) (string, error) {
+ func (w *Worker) getTransaction(txid string, spendingTxs bool, specificJSON bool, addresses map[string]struct{}) (*Tx, error) {
+ 	bchainTx, height, err := w.txCache.GetTransaction(txid)
+ 	if err != nil {
++		if tx := w.txFromIndex(txid, addresses); tx != nil {
++			return tx, nil
++		}
+ 		if err == bchain.ErrTxNotFound {
+ 			return nil, NewAPIError(fmt.Sprintf("Transaction '%v' not found", txid), true)
+ 		}
+@@ -296,6 +299,29 @@ func (w *Worker) getTransaction(txid string, spendingTxs bool, specificJSON bool
+ 	return w.GetTransactionFromBchainTx(bchainTx, height, spendingTxs, specificJSON, addresses)
+ }
+ 
++// txFromIndex builds a confirmed transaction from the index alone, for a pruned
++// backend that could not get the transaction's block from any peer. Inputs,
++// outputs, addresses, values, fee, vsize and block data come from txAddresses;
++// script hex, input txids, version, locktime and sequence numbers do not.
++func (w *Worker) txFromIndex(txid string, addresses map[string]struct{}) *Tx {
++	if w.chainType != bchain.ChainBitcoinType || !w.db.PrunedBackend() {
++		return nil
++	}
++	ta, err := w.db.GetTxAddresses(txid)
++	if err != nil || ta == nil {
++		return nil
++	}
++	bi, err := w.db.GetBlockInfo(ta.Height)
++	if err != nil || bi == nil {
++		return nil
++	}
++	bestheight, _, err := w.db.GetBestBlock()
++	if err != nil {
++		return nil
++	}
++	return w.txFromTxAddress(txid, ta, bi, bestheight, addresses)
++}
++
+ func (w *Worker) getParsedEthereumInputData(data string) *bchain.EthereumParsedInputData {
+ 	var err error
+ 	var signatures *[]bchain.FourByteSignature
+@@ -1758,6 +1784,9 @@ func (w *Worker) GetAddress(address string, page int, txsOnPage int, option Acco
+ 		}
+ 		// mempool txs take the first slots of the paged sequence, before confirmed history
+ 		appendMempoolTxs(mempoolFrom, mempoolTo)
++		if option == AccountDetailsTxHistory && from < to {
++			w.txCache.Prefetch(txc[from:to])
++		}
+ 		for i := from; i < to; i++ {
+ 			txid := txc[i]
+ 			if option == AccountDetailsTxidHistory {
+diff --git a/api/xpub.go b/api/xpub.go
+index e55f3ba5..3cbf522b 100644
+--- a/api/xpub.go
++++ b/api/xpub.go
+@@ -841,6 +841,13 @@ func (w *Worker) GetXpubAddress(xpub string, page int, txsOnPage int, option Acc
+ 				txs = append(txs, txmMap[entry.Txid])
+ 			}
+ 		}
++		if option == AccountDetailsTxHistory && from < to {
++			prefetch := make([]string, 0, to-from)
++			for i := from; i < to; i++ {
++				prefetch = append(prefetch, txc[i].txid)
++			}
++			w.txCache.Prefetch(prefetch)
++		}
+ 		// get confirmed transactions
+ 		for i := from; i < to; i++ {
+ 			xpubTxid := &txc[i]
+diff --git a/bchain/coins/blockchain.go b/bchain/coins/blockchain.go
+index 9a92673d..55685e89 100644
+--- a/bchain/coins/blockchain.go
++++ b/bchain/coins/blockchain.go
+@@ -292,6 +292,12 @@ func (c *blockChainWithMetrics) GetTransaction(txid string) (v *bchain.Tx, err e
+ 	return c.b.GetTransaction(txid)
+ }
+ 
++func (c *blockChainWithMetrics) SetPrunedBackend(txBlock func(txid string) (string, error)) {
++	if p, ok := c.b.(bchain.PrunedBackendSetter); ok {
++		p.SetPrunedBackend(txBlock)
++	}
++}
++
+ func (c *blockChainWithMetrics) GetTransactionSpecific(tx *bchain.Tx) (v json.RawMessage, err error) {
+ 	defer func(s time.Time) { c.observeRPCLatency("GetTransactionSpecific", s, err) }(time.Now())
+ 	return c.b.GetTransactionSpecific(tx)
+diff --git a/bchain/coins/btc/bitcoinrpc.go b/bchain/coins/btc/bitcoinrpc.go
+index 1504f5fd..ac010a27 100644
+--- a/bchain/coins/btc/bitcoinrpc.go
++++ b/bchain/coins/btc/bitcoinrpc.go
+@@ -6,8 +6,10 @@ import (
+ 	"encoding/hex"
+ 	"encoding/json"
+ 	"math/big"
++	"math/rand"
+ 	"net"
+ 	"net/http"
++	"slices"
+ 	"strings"
+ 	"time"
+ 
+@@ -16,6 +18,7 @@ import (
+ 	"github.com/martinboehm/btcd/wire"
+ 	"github.com/trezor/blockbook/bchain"
+ 	"github.com/trezor/blockbook/common"
++	"golang.org/x/sync/singleflight"
+ )
+ 
+ // BitcoinRPC is an interface to JSON-RPC bitcoind service.
+@@ -41,6 +44,11 @@ type BitcoinRPC struct {
+ 	mempoolUseZeroedKey    bool
+ 	alternativeFeeProvider alternativeFeeProviderInterface
+ 	metrics                *common.Metrics
++	// txBlock is set for a pruned node without -txindex, see SetPrunedBackend
++	txBlock func(txid string) (string, error)
++	// blockFetches collapses concurrent downloads of one pruned block into one
++	blockFetches    singleflight.Group
++	blockFetchSlots chan struct{}
+ }
+ 
+ // SetMetrics sets prometheus metrics collector
+@@ -512,6 +520,42 @@ type ResGetRawTransactionNonverbose struct {
+ 	Result string           `json:"result"`
+ }
+ 
++type CmdGetRawTransactionFromBlock struct {
++	Method string `json:"method"`
++	Params struct {
++		Txid      string `json:"txid"`
++		Verbose   bool   `json:"verbose"`
++		Blockhash string `json:"blockhash"`
++	} `json:"params"`
++}
++
++// getblockfrompeer, getpeerinfo
++
++type CmdGetBlockFromPeer struct {
++	Method string `json:"method"`
++	Params struct {
++		Blockhash string `json:"blockhash"`
++		PeerID    int    `json:"peer_id"`
++	} `json:"params"`
++}
++
++type ResGetBlockFromPeer struct {
++	Error  *bchain.RPCError `json:"error"`
++	Result json.RawMessage  `json:"result"`
++}
++
++type CmdGetPeerInfo struct {
++	Method string `json:"method"`
++}
++
++type ResGetPeerInfo struct {
++	Error  *bchain.RPCError `json:"error"`
++	Result []struct {
++		ID            int      `json:"id"`
++		ServicesNames []string `json:"servicesnames"`
++	} `json:"result"`
++}
++
+ type rpcBatchRequest struct {
+ 	JSONRPC string        `json:"jsonrpc,omitempty"`
+ 	ID      int           `json:"id"`
+@@ -739,6 +783,10 @@ func (b *BitcoinRPC) GetBlockInfo(hash string) (*bchain.BlockInfo, error) {
+ 	req.Params.BlockHash = hash
+ 	req.Params.Verbosity = 1
+ 	err := b.Call(&req, &res)
++	if err == nil && res.Error != nil && b.refetchPrunedBlock(hash, res.Error) {
++		res = ResGetBlockInfo{}
++		err = b.Call(&req, &res)
++	}
+ 
+ 	if err != nil {
+ 		return nil, errors.Annotatef(err, "hash %v", hash)
+@@ -777,6 +825,10 @@ func (b *BitcoinRPC) GetBlockRaw(hash string) (string, error) {
+ 	req.Params.BlockHash = hash
+ 	req.Params.Verbosity = 0
+ 	err := b.Call(&req, &res)
++	if err == nil && res.Error != nil && b.refetchPrunedBlock(hash, res.Error) {
++		res = ResGetBlockRaw{}
++		err = b.Call(&req, &res)
++	}
+ 
+ 	if err != nil {
+ 		return "", errors.Annotatef(err, "hash %v", hash)
+@@ -808,6 +860,10 @@ func (b *BitcoinRPC) GetBlockFull(hash string) (*bchain.Block, error) {
+ 	req.Params.BlockHash = hash
+ 	req.Params.Verbosity = 2
+ 	err := b.Call(&req, &res)
++	if err == nil && res.Error != nil && b.refetchPrunedBlock(hash, res.Error) {
++		res = ResGetBlockFull{}
++		err = b.Call(&req, &res)
++	}
+ 
+ 	if err != nil {
+ 		return nil, errors.Annotatef(err, "hash %v", hash)
+@@ -1018,6 +1074,87 @@ func (b *BitcoinRPC) getRawTransaction(txid string) (json.RawMessage, error) {
+ 		return nil, errors.Annotatef(err, "txid %v", txid)
+ 	}
+ 	if res.Error != nil {
++		if IsMissingTx(res.Error) {
++			if b.txBlock != nil {
++				return b.getRawTransactionFromIndexedBlock(txid)
++			}
++			return nil, bchain.ErrTxNotFound
++		}
++		return nil, errors.Annotatef(res.Error, "txid %v", txid)
++	}
++	return res.Result, nil
++}
++
++// SetPrunedBackend tells that the node is pruned and runs without -txindex, so
++// it can return a confirmed transaction only from its block: txBlock returns
++// the hash of that block from blockbook's index. A block the node has pruned
++// is downloaded again from a peer (getblockfrompeer, Bitcoin Core 24+) and
++// kept by the node until it prunes again.
++func (b *BitcoinRPC) SetPrunedBackend(txBlock func(txid string) (string, error)) {
++	b.txBlock = txBlock
++	b.blockFetchSlots = make(chan struct{}, maxBlockFetches)
++}
++
++// blockFromPeerAttempts peers are asked for a pruned block in turn; one that
++// has not sent it within blockFromPeerTimeout is passed over
++const blockFromPeerAttempts = 3
++
++var blockFromPeerTimeout = 4 * time.Second
++
++// At most maxBlockFetches pruned blocks are downloaded at once, which bounds
++// the bandwidth and tx cache growth that requests for old transactions cause;
++// a request that waits longer than blockFetchQueueTimeout for its turn fails.
++const maxBlockFetches = 8
++
++var blockFetchQueueTimeout = 30 * time.Second
++
++var errBlockPruned = errors.New("block pruned")
++
++// isBlockPruned reports the error of a node asked for data of a block it has
++// pruned: "Block not available" from getrawtransaction with a block hash,
++// "Block not available (pruned data)" from getblock
++func isBlockPruned(err *bchain.RPCError) bool {
++	return err.Code == -1 && strings.HasPrefix(err.Message, "Block not available") && !strings.Contains(err.Message, "not fully downloaded")
++}
++
++func (b *BitcoinRPC) getRawTransactionFromIndexedBlock(txid string) (json.RawMessage, error) {
++	blockHash, err := b.txBlock(txid)
++	if err != nil {
++		return nil, errors.Annotatef(err, "txid %v", txid)
++	}
++	if blockHash == "" {
++		return nil, bchain.ErrTxNotFound
++	}
++	r, err := b.getRawTransactionFromBlock(txid, blockHash)
++	if err == errBlockPruned {
++		err = b.refetchBlock(blockHash, func() bool {
++			_, err := b.getRawTransactionFromBlock(txid, blockHash)
++			return err != errBlockPruned
++		})
++		if err == nil {
++			r, err = b.getRawTransactionFromBlock(txid, blockHash)
++		}
++	}
++	return r, err
++}
++
++func (b *BitcoinRPC) getRawTransactionFromBlock(txid string, blockHash string) (json.RawMessage, error) {
++	glog.V(1).Info("rpc: getrawtransaction ", txid, " in block ", blockHash)
++
++	res := ResGetRawTransaction{}
++	req := CmdGetRawTransactionFromBlock{Method: "getrawtransaction"}
++	req.Params.Txid = txid
++	req.Params.Verbose = true
++	req.Params.Blockhash = blockHash
++	err := b.Call(&req, &res)
++
++	if err != nil {
++		return nil, errors.Annotatef(err, "txid %v", txid)
++	}
++	if res.Error != nil {
++		if isBlockPruned(res.Error) {
++			return nil, errBlockPruned
++		}
+ 		if IsMissingTx(res.Error) {
+ 			return nil, bchain.ErrTxNotFound
+ 		}
+@@ -1026,6 +1163,102 @@ func (b *BitcoinRPC) getRawTransaction(txid string) (json.RawMessage, error) {
+ 	return res.Result, nil
+ }
+ 
++// refetchPrunedBlock downloads again a block that a getblock call was refused
++// because the node had pruned it, and reports whether to repeat the call
++func (b *BitcoinRPC) refetchPrunedBlock(blockHash string, rpcErr *bchain.RPCError) bool {
++	if b.txBlock == nil || !isBlockPruned(rpcErr) {
++		return false
++	}
++	if err := b.refetchBlock(blockHash, func() bool { return b.blockStored(blockHash) }); err != nil {
++		glog.Warning("rpc: ", err)
++		return false
++	}
++	return true
++}
++
++// blockStored reports whether the node has the block's data
++func (b *BitcoinRPC) blockStored(blockHash string) bool {
++	res := ResGetBlockInfo{}
++	req := CmdGetBlock{Method: "getblock"}
++	req.Params.BlockHash = blockHash
++	req.Params.Verbosity = 1
++	return b.Call(&req, &res) == nil && res.Error == nil
++}
++
++// refetchBlock downloads a pruned block again; arrived reports whether the
++// node has stored it. Concurrent requests for one block share one download.
++func (b *BitcoinRPC) refetchBlock(blockHash string, arrived func() bool) error {
++	_, err, _ := b.blockFetches.Do(blockHash, func() (interface{}, error) {
++		return nil, b.fetchBlockFromPeers(blockHash, arrived)
++	})
++	return err
++}
++
++func (b *BitcoinRPC) fetchBlockFromPeers(blockHash string, arrived func() bool) error {
++	select {
++	case b.blockFetchSlots <- struct{}{}:
++		defer func() { <-b.blockFetchSlots }()
++	case <-time.After(blockFetchQueueTimeout):
++		return errors.Errorf("block %v is pruned and %d downloads are already running", blockHash, maxBlockFetches)
++	}
++	peers, err := b.archivalPeers()
++	if err != nil {
++		return errors.Annotatef(err, "block %v is pruned", blockHash)
++	}
++	for i, id := range peers {
++		if i == blockFromPeerAttempts {
++			break
++		}
++		glog.V(1).Info("rpc: getblockfrompeer ", blockHash, " peer ", id)
++		res := ResGetBlockFromPeer{}
++		req := CmdGetBlockFromPeer{Method: "getblockfrompeer"}
++		req.Params.Blockhash = blockHash
++		req.Params.PeerID = id
++		if err := b.Call(&req, &res); err != nil {
++			return errors.Annotatef(err, "getblockfrompeer %v", blockHash)
++		}
++		if res.Error != nil {
++			// another request stored it meanwhile
++			if strings.Contains(res.Error.Message, "already downloaded") {
++				return nil
++			}
++			glog.Warning("rpc: getblockfrompeer ", blockHash, " peer ", id, ": ", res.Error)
++			continue
++		}
++		for deadline := time.Now().Add(blockFromPeerTimeout); time.Now().Before(deadline); {
++			time.Sleep(100 * time.Millisecond)
++			if arrived() {
++				return nil
++			}
++		}
++		glog.Warning("rpc: getblockfrompeer ", blockHash, " peer ", id, ": no block in ", blockFromPeerTimeout)
++	}
++	return errors.Errorf("block %v is pruned and no peer sent it", blockHash)
++}
++
++// archivalPeers returns the connected peers that serve every block (NODE_NETWORK,
++// not only the last 288 blocks of NODE_NETWORK_LIMITED), in random order
++func (b *BitcoinRPC) archivalPeers() ([]int, error) {
++	res := ResGetPeerInfo{}
++	if err := b.Call(&CmdGetPeerInfo{Method: "getpeerinfo"}, &res); err != nil {
++		return nil, errors.Annotatef(err, "getpeerinfo")
++	}
++	if res.Error != nil {
++		return nil, errors.Annotatef(res.Error, "getpeerinfo")
++	}
++	var peers []int
++	for _, p := range res.Result {
++		if slices.Contains(p.ServicesNames, "NETWORK") && slices.Contains(p.ServicesNames, "WITNESS") {
++			peers = append(peers, p.ID)
++		}
++	}
++	if len(peers) == 0 {
++		return nil, errors.New("no connected peer serves old blocks")
++	}
++	rand.Shuffle(len(peers), func(i, j int) { peers[i], peers[j] = peers[j], peers[i] })
++	return peers, nil
++}
++
+ func (b *BitcoinRPC) blockchainEstimateSmartFee(blocks int, conservative bool) (big.Int, error) {
+ 	// use EstimateFee if EstimateSmartFee is not supported
+ 	if !b.ChainConfig.SupportsEstimateSmartFee && b.ChainConfig.SupportsEstimateFee {
+diff --git a/bchain/coins/btc/bitcoinrpc_pruned_test.go b/bchain/coins/btc/bitcoinrpc_pruned_test.go
+new file mode 100644
+index 00000000..bd11a8e0
+--- /dev/null
++++ b/bchain/coins/btc/bitcoinrpc_pruned_test.go
+@@ -0,0 +1,295 @@
++package btc
++
++import (
++	"encoding/json"
++	"io"
++	"net/http"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/trezor/blockbook/bchain"
++)
++
++const (
++	prunedTxid  = "8a4d7b8c6e2f0b5e3a1d9c7f6e5d4c3b2a19f8e7d6c5b4a39281706f5e4d3c2b"
++	prunedBlock = "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054"
++	prunedTxRaw = `{"txid":"` + prunedTxid + `","hash":"` + prunedTxid + `","version":2,"size":191,"vsize":110,"weight":437,"locktime":0,` +
++		`"vin":[{"txid":"1f2e3d4c5b6a79881f2e3d4c5b6a79881f2e3d4c5b6a79881f2e3d4c5b6a7988","vout":1,"scriptSig":{"asm":"","hex":""},"txinwitness":["30","02"],"sequence":4294967293}],` +
++		`"vout":[{"value":0.0005,"n":0,"scriptPubKey":{"asm":"0 751e76e8199196d454941c45d1b3a323f1433bd6","hex":"0014751e76e8199196d454941c45d1b3a323f1433bd6","address":"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4","type":"witness_v0_keyhash"}}],` +
++		`"hex":"02000000000101","blockhash":"` + prunedBlock + `","confirmations":10,"time":1700000000,"blocktime":1700000000,"in_active_chain":true}`
++	twoPeers = `[{"id":3,"servicesnames":["NETWORK_LIMITED","WITNESS"]},{"id":7,"servicesnames":["NETWORK","WITNESS","NETWORK_LIMITED","P2P_V2"]}]`
++)
++
++// fakePrunedNode answers like Bitcoin Core 31 run with prune=1 and without
++// txindex. The block is pruned until a peer sends it, arriveAfter after
++// getblockfrompeer if sends is set.
++type fakePrunedNode struct {
++	mu          sync.Mutex
++	pruned      bool
++	peers       string
++	sends       bool
++	arriveAfter time.Duration
++	requested   []int
++	methods     []string
++}
++
++func (f *fakePrunedNode) handle(body string) string {
++	var req struct {
++		Method string          `json:"method"`
++		Params json.RawMessage `json:"params"`
++	}
++	if err := json.Unmarshal([]byte(body), &req); err != nil {
++		return `{"result":null,"error":{"code":-32700,"message":"Parse error"},"id":1}`
++	}
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	f.methods = append(f.methods, req.Method)
++	switch req.Method {
++	case "getrawtransaction":
++		var p struct {
++			Txid      string `json:"txid"`
++			Blockhash string `json:"blockhash"`
++		}
++		_ = json.Unmarshal(req.Params, &p)
++		if p.Blockhash == "" {
++			return `{"result":null,"error":{"code":-5,"message":"No such mempool transaction. Use -txindex or provide a block hash to enable blockchain transaction queries. Use gettransaction for wallet transactions."},"id":1}`
++		}
++		if f.pruned {
++			return `{"result":null,"error":{"code":-1,"message":"Block not available"},"id":1}`
++		}
++		if p.Txid != prunedTxid {
++			return `{"result":null,"error":{"code":-5,"message":"No such transaction found in the provided block. Use gettransaction for wallet transactions."},"id":1}`
++		}
++		return `{"result":` + prunedTxRaw + `,"error":null,"id":1}`
++	case "getblock":
++		var p struct {
++			Verbosity int `json:"verbosity"`
++		}
++		_ = json.Unmarshal(req.Params, &p)
++		if f.pruned {
++			return `{"result":null,"error":{"code":-1,"message":"Block not available (pruned data)"},"id":1}`
++		}
++		if p.Verbosity == 0 {
++			return `{"result":"00","error":null,"id":1}`
++		}
++		return `{"result":{"hash":"` + prunedBlock + `","height":5,"tx":["` + prunedTxid + `"]},"error":null,"id":1}`
++	case "getpeerinfo":
++		return `{"result":` + f.peers + `,"error":null,"id":1}`
++	case "getblockfrompeer":
++		var p struct {
++			PeerID int `json:"peer_id"`
++		}
++		_ = json.Unmarshal(req.Params, &p)
++		if !f.pruned {
++			return `{"result":null,"error":{"code":-1,"message":"Block already downloaded"},"id":1}`
++		}
++		f.requested = append(f.requested, p.PeerID)
++		if f.sends {
++			time.AfterFunc(f.arriveAfter, func() {
++				f.mu.Lock()
++				f.pruned = false
++				f.mu.Unlock()
++			})
++		}
++		return `{"result":{},"error":null,"id":1}`
++	}
++	return `{"result":null,"error":{"code":-32601,"message":"Method not found"},"id":1}`
++}
++
++func (f *fakePrunedNode) calls(method string) int {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	n := 0
++	for _, m := range f.methods {
++		if m == method {
++			n++
++		}
++	}
++	return n
++}
++
++// newFakePrunedRPC wires a BitcoinRPC to f; the index places prunedTxid in
++// prunedBlock and knows no other transaction
++func newFakePrunedRPC(f *fakePrunedNode, pruned bool) *BitcoinRPC {
++	cfg := &Configuration{}
++	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
++		body, _ := io.ReadAll(r.Body)
++		return &http.Response{
++			StatusCode: 200,
++			Body:       io.NopCloser(strings.NewReader(f.handle(string(body)))),
++			Header:     http.Header{"Content-Type": []string{"application/json"}},
++		}, nil
++	})
++	b := &BitcoinRPC{
++		BaseChain:    &bchain.BaseChain{Parser: NewBitcoinParser(GetChainParams("main"), cfg)},
++		client:       http.Client{Transport: transport},
++		rpcURL:       "http://backend",
++		ChainConfig:  cfg,
++		RPCMarshaler: JSONMarshalerV2{},
++	}
++	if pruned {
++		b.SetPrunedBackend(func(txid string) (string, error) {
++			if txid == prunedTxid {
++				return prunedBlock, nil
++			}
++			return "", nil
++		})
++	}
++	return b
++}
++
++func checkPrunedTx(t *testing.T, tx *bchain.Tx) {
++	t.Helper()
++	if tx.Txid != prunedTxid || tx.VSize != 110 || tx.Hex == "" || tx.Confirmations != 10 || tx.Blocktime != 1700000000 || tx.Version != 2 {
++		t.Fatalf("unexpected tx %+v", tx)
++	}
++	if len(tx.Vin) != 1 || tx.Vin[0].Txid == "" || tx.Vin[0].Vout != 1 || tx.Vin[0].Sequence != 4294967293 {
++		t.Fatalf("unexpected vin %+v", tx.Vin)
++	}
++}
++
++func TestPrunedTxFromBlockOnDisk(t *testing.T) {
++	f := &fakePrunedNode{peers: twoPeers}
++	tx, err := newFakePrunedRPC(f, true).GetTransaction(prunedTxid)
++	if err != nil {
++		t.Fatal(err)
++	}
++	checkPrunedTx(t, tx)
++	if f.calls("getpeerinfo") != 0 || f.calls("getblockfrompeer") != 0 {
++		t.Fatalf("a block on disk must not be downloaded, calls %v", f.methods)
++	}
++}
++
++func TestPrunedTxBlockDownloadedFromArchivalPeer(t *testing.T) {
++	f := &fakePrunedNode{peers: twoPeers, pruned: true, sends: true, arriveAfter: 300 * time.Millisecond}
++	tx, err := newFakePrunedRPC(f, true).GetTransaction(prunedTxid)
++	if err != nil {
++		t.Fatal(err)
++	}
++	checkPrunedTx(t, tx)
++	if len(f.requested) != 1 || f.requested[0] != 7 {
++		t.Fatalf("expected one request to the archival peer 7, got %v", f.requested)
++	}
++}
++
++// tx-specific of a cached transaction has no backend JSON and asks the node again
++func TestPrunedTxSpecific(t *testing.T) {
++	f := &fakePrunedNode{peers: twoPeers, pruned: true, sends: true, arriveAfter: 100 * time.Millisecond}
++	sj, err := newFakePrunedRPC(f, true).GetTransactionSpecific(&bchain.Tx{Txid: prunedTxid})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if !strings.Contains(string(sj), `"vsize":110`) {
++		t.Fatalf("unexpected tx-specific %s", sj)
++	}
++}
++
++func TestPrunedTxConcurrentRequestsShareOneDownload(t *testing.T) {
++	f := &fakePrunedNode{peers: twoPeers, pruned: true, sends: true, arriveAfter: 500 * time.Millisecond}
++	b := newFakePrunedRPC(f, true)
++	var wg sync.WaitGroup
++	errs := make([]error, 5)
++	for i := range errs {
++		wg.Add(1)
++		go func(i int) {
++			defer wg.Done()
++			_, errs[i] = b.GetTransaction(prunedTxid)
++		}(i)
++	}
++	wg.Wait()
++	for _, err := range errs {
++		if err != nil {
++			t.Fatal(err)
++		}
++	}
++	if len(f.requested) != 1 {
++		t.Fatalf("expected one download for concurrent requests, got %v", f.requested)
++	}
++}
++
++func TestPrunedTxNoPeerSends(t *testing.T) {
++	saved := blockFromPeerTimeout
++	blockFromPeerTimeout = 200 * time.Millisecond
++	defer func() { blockFromPeerTimeout = saved }()
++	peers := `[{"id":1,"servicesnames":["NETWORK","WITNESS"]},{"id":2,"servicesnames":["NETWORK","WITNESS"]},` +
++		`{"id":4,"servicesnames":["NETWORK","WITNESS"]},{"id":5,"servicesnames":["NETWORK","WITNESS"]}]`
++	f := &fakePrunedNode{peers: peers, pruned: true}
++	_, err := newFakePrunedRPC(f, true).GetTransaction(prunedTxid)
++	if err == nil || err == bchain.ErrTxNotFound {
++		t.Fatalf("expected a download error, got %v", err)
++	}
++	if len(f.requested) != blockFromPeerAttempts {
++		t.Fatalf("expected %d peers asked, got %v", blockFromPeerAttempts, f.requested)
++	}
++}
++
++func TestPrunedTxNoArchivalPeer(t *testing.T) {
++	f := &fakePrunedNode{peers: `[{"id":3,"servicesnames":["NETWORK_LIMITED","WITNESS"]}]`, pruned: true, sends: true}
++	if _, err := newFakePrunedRPC(f, true).GetTransaction(prunedTxid); err == nil {
++		t.Fatal("expected an error without a peer that serves old blocks")
++	}
++	if f.calls("getblockfrompeer") != 0 {
++		t.Fatalf("a limited peer must not be asked, calls %v", f.methods)
++	}
++}
++
++func TestPrunedTxUnknownToIndex(t *testing.T) {
++	f := &fakePrunedNode{peers: twoPeers}
++	if _, err := newFakePrunedRPC(f, true).GetTransaction(strings.Repeat("0", 64)); err != bchain.ErrTxNotFound {
++		t.Fatalf("expected ErrTxNotFound, got %v", err)
++	}
++	if f.calls("getrawtransaction") != 1 {
++		t.Fatalf("a transaction the index does not know must not be looked up in a block, calls %v", f.methods)
++	}
++}
++
++func TestNotPrunedBackendUnchanged(t *testing.T) {
++	f := &fakePrunedNode{peers: twoPeers, pruned: true, sends: true}
++	b := newFakePrunedRPC(f, false)
++	if _, err := b.GetTransaction(prunedTxid); err != bchain.ErrTxNotFound {
++		t.Fatalf("expected ErrTxNotFound, got %v", err)
++	}
++	if _, err := b.GetBlockRaw(prunedBlock); err == nil {
++		t.Fatal("expected the getblock error")
++	}
++	if f.calls("getblockfrompeer") != 0 || f.calls("getpeerinfo") != 0 {
++		t.Fatalf("only a pruned backend downloads blocks again, calls %v", f.methods)
++	}
++}
++
++func TestPrunedBlockDownloadedFromArchivalPeer(t *testing.T) {
++	f := &fakePrunedNode{peers: twoPeers, pruned: true, sends: true, arriveAfter: 100 * time.Millisecond}
++	b := newFakePrunedRPC(f, true)
++	bi, err := b.GetBlockInfo(prunedBlock)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(bi.Txids) != 1 || bi.Txids[0] != prunedTxid {
++		t.Fatalf("unexpected block info %+v", bi)
++	}
++	if raw, err := b.GetBlockRaw(prunedBlock); err != nil || raw != "00" {
++		t.Fatalf("unexpected raw block %q, %v", raw, err)
++	}
++	if len(f.requested) != 1 || f.requested[0] != 7 {
++		t.Fatalf("expected one request to the archival peer 7, got %v", f.requested)
++	}
++}
++
++func TestPrunedBlockDownloadsAreBounded(t *testing.T) {
++	saved := blockFetchQueueTimeout
++	blockFetchQueueTimeout = 100 * time.Millisecond
++	defer func() { blockFetchQueueTimeout = saved }()
++	f := &fakePrunedNode{peers: twoPeers, pruned: true, sends: true}
++	b := newFakePrunedRPC(f, true)
++	for i := 0; i < maxBlockFetches; i++ {
++		b.blockFetchSlots <- struct{}{}
++	}
++	if _, err := b.GetTransaction(prunedTxid); err == nil || err == bchain.ErrTxNotFound {
++		t.Fatalf("expected a busy error, got %v", err)
++	}
++	if f.calls("getblockfrompeer") != 0 {
++		t.Fatalf("no download may start while all slots are taken, calls %v", f.methods)
++	}
++}
+diff --git a/bchain/types.go b/bchain/types.go
+index dfb9e38e..e83cd69d 100644
+--- a/bchain/types.go
++++ b/bchain/types.go
+@@ -299,6 +299,15 @@ type MempoolBatcher interface {
+ 	GetRawTransactionsForMempoolBatch(txids []string) (map[string]*Tx, error)
+ }
+ 
++// PrunedBackendSetter is implemented by a backend that still returns confirmed
++// transactions and old blocks when it is pruned and runs without a transaction
++// index: txBlock, backed by blockbook's index, returns the hash of the block
++// holding a transaction ("" if unknown), and pruned blocks are downloaded
++// again from peers.
++type PrunedBackendSetter interface {
++	SetPrunedBackend(txBlock func(txid string) (string, error))
++}
++
+ // BlockChain defines common interface to block chain daemon
+ type BlockChain interface {
+ 	// life-cycle methods
+diff --git a/blockbook.go b/blockbook.go
+index 0854364c..6d43f5d1 100644
+--- a/blockbook.go
++++ b/blockbook.go
+@@ -95,6 +95,10 @@ var (
+ 	resyncMempoolPeriodMs = flag.Int("resyncmempoolperiod", 60017, "resync mempool period in milliseconds")
+ 
+ 	extendedIndex = flag.Bool("extendedindex", false, "if true, create index of input txids and spending transactions")
++
++	prunedBackend = flag.Bool("prunedbackend", false, "the backend is pruned and runs without -txindex: get confirmed transactions from their blocks, download pruned blocks again from peers, store vsizes in the index")
++
++	txCacheMaxGB = flag.Int("txcachemaxgb", 0, "empty the tx cache when it takes more than this many GB, 0 = never")
+ )
+ 
+ var (
+@@ -225,6 +229,14 @@ func mainWithExitCode() int {
+ 		glog.Error("rocksDB: ", err)
+ 		return exitCodeFatal
+ 	}
++	index.SetPrunedBackend(*prunedBackend)
++	if *prunedBackend {
++		if p, ok := chain.(bchain.PrunedBackendSetter); ok {
++			p.SetPrunedBackend(index.TxBlockHash)
++		} else {
++			glog.Warning("prunedbackend: this backend cannot return old transactions")
++		}
++	}
+ 	defer func() {
+ 		glog.Info("shutdown: rocksdb close start")
+ 		if err := index.Close(); err != nil {
+@@ -810,6 +822,7 @@ func storeInternalStateLoop() {
+ 	lastCompute := time.Now()
+ 	lastAppInfo := time.Now()
+ 	logAppInfoPeriod := 15 * time.Minute
++	var lastTxCacheTrim time.Time
+ 	// randomize the duration between ComputeInternalStateColumnStats to avoid peaks after reboot of machine with multiple blockbooks
+ 	computePeriod := time.Duration(*dbStatsPeriodHours)*time.Hour + time.Duration(rand.Float64()*float64((4*time.Hour).Nanoseconds()))
+ 	if (*dbStatsPeriodHours) > 0 {
+@@ -838,6 +851,12 @@ func storeInternalStateLoop() {
+ 		if err := index.StoreInternalState(internalState); err != nil {
+ 			glog.Error("storeInternalStateLoop ", errors.ErrorStack(err))
+ 		}
++		if *txCacheMaxGB > 0 && time.Since(lastTxCacheTrim) > time.Hour {
++			lastTxCacheTrim = time.Now()
++			if err := index.TrimTxCache(uint64(*txCacheMaxGB) << 30); err != nil {
++				glog.Error("trimTxCache ", err)
++			}
++		}
+ 		if lastAppInfo.Add(logAppInfoPeriod).Before(time.Now()) {
+ 			if glog.V(1) {
+ 				glog.Info(index.GetMemoryStats())
+diff --git a/common/internalstate.go b/common/internalstate.go
+index 77674c13..819d1d1b 100644
+--- a/common/internalstate.go
++++ b/common/internalstate.go
+@@ -63,6 +63,7 @@ type InternalState struct {
+ 
+ 	DbState       uint32 `json:"dbState" ts_doc:"State of the database (closed=0, open=1, inconsistent=2)."`
+ 	ExtendedIndex bool   `json:"extendedIndex" ts_doc:"Indicates if an extended indexing strategy is used."`
++	PrunedBackend bool   `json:"prunedBackend,omitempty" ts_doc:"Indicates that the backend is pruned and the index stores transaction vsizes."`
+ 
+ 	LastStore time.Time `json:"lastStore" ts_doc:"Time when the internal state was last stored/persisted."`
+ 
+diff --git a/db/rocksdb.go b/db/rocksdb.go
+index 7637534a..366f7d1c 100644
+--- a/db/rocksdb.go
++++ b/db/rocksdb.go
+@@ -296,6 +296,7 @@ type RocksDB struct {
+ 	maxOpenFiles    int
+ 	cbs             connectBlockStats
+ 	extendedIndex   bool
++	prunedBackend   bool
+ 	connectBlockMux sync.Mutex
+ 	// reorgGen advances on every successful Ethereum-type disconnect; embed
+ 	// in cache keys so a same-height reorg invalidates them lazily.
+@@ -521,6 +522,33 @@ func (d *RocksDB) HasExtendedIndex() bool {
+ 	return d.extendedIndex
+ }
+ 
++// SetPrunedBackend marks the backend as pruned and without -txindex. The index
++// then also stores each transaction's vsize, for when no peer sends the block
++// of an old transaction. It must be called before LoadInternalState.
++func (d *RocksDB) SetPrunedBackend(pruned bool) {
++	d.prunedBackend = pruned
++}
++
++// PrunedBackend returns true if the backend is pruned and runs without -txindex
++func (d *RocksDB) PrunedBackend() bool {
++	return d.prunedBackend
++}
++
++// storesVSize returns true if TxAddresses records carry the transaction's vsize
++func (d *RocksDB) storesVSize() bool {
++	return d.extendedIndex || d.prunedBackend
++}
++
++// TxBlockHash returns the hash of the block holding a confirmed transaction,
++// or "" if the index does not know the transaction
++func (d *RocksDB) TxBlockHash(txid string) (string, error) {
++	ta, err := d.GetTxAddresses(txid)
++	if err != nil || ta == nil {
++		return "", err
++	}
++	return d.GetBlockHash(ta.Height)
++}
++
+ // GetMemoryStats returns memory usage statistics as reported by RocksDB
+ func (d *RocksDB) GetMemoryStats() string {
+ 	var total, indexAndFilter, memtable uint64
+@@ -990,7 +1018,7 @@ func (d *RocksDB) processAddressesBitcoinType(block *bchain.Block, addresses add
+ 		}
+ 		blockTxIDs[txi] = btxID
+ 		ta := TxAddresses{Height: block.Height}
+-		if d.extendedIndex {
++		if d.storesVSize() {
+ 			if tx.VSize > 0 {
+ 				ta.VSize = uint32(tx.VSize)
+ 			} else {
+@@ -1379,7 +1407,7 @@ func (d *RocksDB) GetTxAddressesOutput(txid string, vout uint32) (*TxOutput, err
+ 		return nil, nil
+ 	}
+ 	_, l := unpackVaruint(buf) // height
+-	if d.extendedIndex {
++	if d.storesVSize() {
+ 		_, n := unpackVaruint(buf[l:]) // vsize
+ 		l += n
+ 	}
+@@ -1424,7 +1452,7 @@ func (d *RocksDB) packTxAddresses(ta *TxAddresses, buf []byte, varBuf []byte) []
+ 	buf = buf[:0]
+ 	l := packVaruint(uint(ta.Height), varBuf)
+ 	buf = append(buf, varBuf[:l]...)
+-	if d.extendedIndex {
++	if d.storesVSize() {
+ 		l = packVaruint(uint(ta.VSize), varBuf)
+ 		buf = append(buf, varBuf[:l]...)
+ 	}
+@@ -1569,7 +1597,7 @@ func (d *RocksDB) unpackTxAddresses(buf []byte) (*TxAddresses, error) {
+ 	ta := TxAddresses{}
+ 	height, l := unpackVaruint(buf)
+ 	ta.Height = uint32(height)
+-	if d.extendedIndex {
++	if d.storesVSize() {
+ 		vsize, ll := unpackVaruint(buf[l:])
+ 		ta.VSize = uint32(vsize)
+ 		l += ll
+@@ -2244,6 +2272,24 @@ func (d *RocksDB) PutTx(tx *bchain.Tx, height uint32, blockTime int64) error {
+ 	return err
+ }
+ 
++// TrimTxCache empties the tx cache once its files take more than maxBytes.
++// Nothing is ever evicted from it, and with a pruned backend it receives every
++// old transaction anyone asks for.
++func (d *RocksDB) TrimTxCache(maxBytes uint64) error {
++	size, _ := d.db.GetIntPropertyCF("rocksdb.live-sst-files-size", d.cfh[cfTransactions])
++	if size <= maxBytes {
++		return nil
++	}
++	glog.Infof("rocksdb: tx cache takes %d bytes, more than %d, emptying it", size, maxBytes)
++	end := bytes.Repeat([]byte{0xff}, d.chainParser.PackedTxidLen()+1)
++	if err := d.db.DeleteRangeCF(d.wo, d.cfh[cfTransactions], []byte{}, end); err != nil {
++		return err
++	}
++	d.is.SetDBColumnStats(cfTransactions, 0, 0, 0)
++	d.db.CompactRangeCF(d.cfh[cfTransactions], grocksdb.Range{})
++	return nil
++}
++
+ // DeleteTx removes transactions from db
+ func (d *RocksDB) DeleteTx(txid string) error {
+ 	key, err := d.chainParser.PackTxid(txid)
+@@ -2448,6 +2494,7 @@ func (d *RocksDB) LoadInternalState(config *common.Config) (*common.InternalStat
+ 			UtxoChecked:             true,
+ 			SortedAddressContracts:  true,
+ 			ExtendedIndex:           d.extendedIndex,
++			PrunedBackend:           d.prunedBackend,
+ 			BlockGolombFilterP:      config.BlockGolombFilterP,
+ 			BlockFilterScripts:      config.BlockFilterScripts,
+ 			BlockFilterUseZeroedKey: config.BlockFilterUseZeroedKey,
+@@ -2467,6 +2514,9 @@ func (d *RocksDB) LoadInternalState(config *common.Config) (*common.InternalStat
+ 		if is.ExtendedIndex != d.extendedIndex {
+ 			return nil, errors.Errorf("ExtendedIndex setting does not match. DB extendedIndex %v, extendedIndex in options %v", is.ExtendedIndex, d.extendedIndex)
+ 		}
++		if is.PrunedBackend != d.prunedBackend {
++			return nil, errors.Errorf("PrunedBackend setting does not match. DB prunedBackend %v, prunedBackend in options %v", is.PrunedBackend, d.prunedBackend)
++		}
+ 		if is.BlockGolombFilterP != config.BlockGolombFilterP {
+ 			return nil, errors.Errorf("BlockGolombFilterP does not match. DB BlockGolombFilterP %v, config BlockGolombFilterP %v", is.BlockGolombFilterP, config.BlockGolombFilterP)
+ 		}
+diff --git a/db/txcache.go b/db/txcache.go
+index 26f0da83..69ada6fc 100644
+--- a/db/txcache.go
++++ b/db/txcache.go
+@@ -1,6 +1,8 @@
+ package db
+ 
+ import (
++	"sync"
++
+ 	"github.com/golang/glog"
+ 	"github.com/juju/errors"
+ 	"github.com/trezor/blockbook/bchain"
+@@ -106,3 +108,31 @@ func (c *TxCache) GetTransaction(txid string) (*bchain.Tx, int, error) {
+ 	}
+ 	return tx, int(h), nil
+ }
++
++// prefetchParallelism bounds the transactions of one history page fetched at once
++const prefetchParallelism = 8
++
++// Prefetch puts the given transactions into the cache concurrently. With a
++// pruned backend an old transaction may need its block from a peer, and a
++// history page would otherwise wait for those downloads one after another.
++func (c *TxCache) Prefetch(txids []string) {
++	if !c.enabled || !c.db.PrunedBackend() || len(txids) < 2 {
++		return
++	}
++	sem := make(chan struct{}, prefetchParallelism)
++	var wg sync.WaitGroup
++	for _, txid := range txids {
++		wg.Add(1)
++		sem <- struct{}{}
++		go func(txid string) {
++			defer func() {
++				<-sem
++				wg.Done()
++			}()
++			if _, _, err := c.GetTransaction(txid); err != nil {
++				glog.V(1).Info("txcache: prefetch ", txid, ": ", err)
++			}
++		}(txid)
++	}
++	wg.Wait()
++}
+diff --git a/server/websocket.go b/server/websocket.go
+index a5a89bc9..bc5a8580 100644
+--- a/server/websocket.go
++++ b/server/websocket.go
+@@ -1779,6 +1779,13 @@ func populateBitcoinVinAddrDescs(vins []bchain.MempoolVin, getAddrDesc func(stri
+ // getBitcoinVinAddrDesc resolves an input outpoint to an address descriptor
+ // using txCache. It is best-effort and can return chain-level not-found errors.
+ func (s *WebsocketServer) getBitcoinVinAddrDesc(txid string, vout uint32) (bchain.AddressDescriptor, error) {
++	// The index has every confirmed output. The backend may not: a pruned one
++	// would download the previous transaction's block for every input.
++	if s.db != nil {
++		if addrDesc, _ := s.db.AddrDescForOutpoint(bchain.Outpoint{Txid: txid, Vout: int32(vout)}); len(addrDesc) > 0 {
++			return addrDesc, nil
++		}
++	}
+ 	if s.txCache == nil {
+ 		return nil, bchain.ErrTxNotFound
+ 	}

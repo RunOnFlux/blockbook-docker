@@ -16,29 +16,20 @@ function trim() {
   printf '%s' "$var"
 }
 
-echo -e "| BLOCKBOOK LUNCHER v2.0 [$(date '+%Y-%m-%d %H:%M:%S')]"
+echo -e "| BLOCKBOOK LAUNCHER v3 [$(date '+%Y-%m-%d %H:%M:%S')] $(cat /opt/blockbook/VERSION)"
 echo -e "---------------------------------------------------------------------------"
 if [[ "$DAEMON_CONFIG" != "AUTO" ]]; then
-  echo -e "| Blockbook Settings: COIN=$COIN, RPC_USER=$RPC_USER, RPC_PASS=$RPC_PASS, RPC_PORT=$RPC_PORT, BLOCKBOOK_PORT=$BLOCKBOOK_PORT, RPC_HOST=$RPC_HOST, RPC_URL_PROTOCOL=$RPC_URL_PROTOCOL"
+  echo -e "| Blockbook Settings: COIN=$COIN, RPC_USER=$RPC_USER, RPC_PORT=$RPC_PORT, BLOCKBOOK_PORT=$BLOCKBOOK_PORT, RPC_HOST=$RPC_HOST, RPC_URL_PROTOCOL=$RPC_URL_PROTOCOL"
 else
   echo -e "| Blockbook Settings: COIN=$COIN, BLOCKBOOK_PORT=$BLOCKBOOK_PORT, DAEMON_CONFIG=AUTO"
 fi
-echo -e "| Awaiting for Blockbook build..."
-while true; do
-   if [[ -f $CFG_FILE && -f $HOME/blockbook/blockbook ]]; then
-     sleep 20
-     break
-   fi
-   sleep 20
+until [[ -f /run/bb/prepared && -f /run/bb/bootstrapped && -f $CFG_FILE ]]; do
+  sleep 10
 done
-if [[ "$BOOTSTRAP" == "1" && ! -f /root/BOOTSTRAP_LOCKED ]]; then
-  echo -e "| Awaiting for bootstraping..."
-  while true; do
-   if [[ -f /root/BOOTSTRAP_LOCKED  ]]; then
-     sleep 20
-     break
-   fi
-   sleep 180
+if [[ "$BOOTSTRAP" == "1" && "$DAEMON" == "1" ]]; then
+  echo -e "| Awaiting the daemon's bootstrap step..."
+  until [[ -f /run/bb/daemon_bootstrap_done ]]; do
+    sleep 20
   done
 fi
 if [[ ! -f /root/CONFIG_CRETED ]]; then
@@ -59,7 +50,24 @@ if [[ ! -d /root/blockbook-db ]]; then
   mkdir -p /root/blockbook-db
 fi
 
-exec_string="$HOME/blockbook/blockbook -sync -blockchaincfg=$CFG_FILE -datadir=/root/blockbook-db -debug -workers=${WORKERS:-1} -dbcache=${DBCACHE:-500} -public=:${BLOCKBOOK_PORT} -logtostderr"
+# The first sync with several workers is a bulk import: it keeps large maps of
+# transactions and balances in memory and leaves the index unusable if it is
+# killed before it ends. After that happened once (corruption.sh), one worker:
+# slower, much less memory, and the index is consistent after every block.
+if [[ -z "$WORKERS" && -f /root/blockbook-db.sequential ]]; then
+  WORKERS=1
+fi
+# Go collects garbage harder near this limit instead of letting its heap grow
+# to twice what is live. Blockbook shares the container with the daemon.
+mem_max=$(cat /sys/fs/cgroup/memory.max 2>/dev/null)
+if [[ -z "$GOMEMLIMIT" && "$mem_max" =~ ^[0-9]+$ ]]; then
+  if [[ "${DAEMON:-1}" == "1" ]]; then share=50; else share=80; fi
+  export GOMEMLIMIT="$(( mem_max / 1048576 * share / 100 ))MiB"
+  echo -e "| GOMEMLIMIT=$GOMEMLIMIT"
+fi
+
+# -dbcache is in bytes: the old default of 500 gave RocksDB a 500 byte cache.
+exec_string="$HOME/blockbook/blockbook -sync -blockchaincfg=$CFG_FILE -datadir=/root/blockbook-db -workers=${WORKERS:-4} -dbcache=${DBCACHE:-536870912} -public=:${BLOCKBOOK_PORT} -logtostderr"
 args_to_remove=( -datadir -debug -log -blockchaincfg -sync -logtostderr -public )
 additional_params_from_blockbook=$(jq -r .blockbook.additional_params $HOME/blockbook/configs/coins/${COIN}.json)
 additional_params_from_docker="${BLOCKBOOK_PARAMS}"
@@ -92,6 +100,19 @@ else
 fi
 
 clean_variable=$(trim "${docker_clean} ${final_clean}")
+# A pruned backend has no txindex: blockbook gets a confirmed transaction from
+# its block and downloads a pruned block again from a peer (patches/0001). What
+# it fetched stays in the tx cache, emptied past TXCACHE_MAX_GB. The extended
+# index (every input's previous txid and every spent output's spender, ~245 GB
+# of Bitcoin's index in 2026) does not fit next to the rest of the index in an
+# 820 GB app.
+if [[ "$PRUNE_BACKEND" == "1" ]]; then
+  kept=""
+  for arg in ${clean_variable}; do
+    [[ "$arg" =~ ^--?(extendedindex|notxcache)(=|$) ]] || kept="${kept} ${arg}"
+  done
+  clean_variable=$(trim "${kept} -prunedbackend -txcachemaxgb=${TXCACHE_MAX_GB:-20}")
+fi
 if [[ "$clean_variable" != "" ]]; then
    getArgs "${clean_variable}"
    for arg in "${argsArray[@]}"; do
